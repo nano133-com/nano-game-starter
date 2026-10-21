@@ -35,7 +35,7 @@
         "description": "Optional. The secret key of the same Turnstile widget. Leave empty to skip it."
       },
       "NODE_API_KEY": {
-        "description": "Optional but advised. A free API key from [Nanswap Nodes](https://nanswap.com/nano-node). Payments are checked there first, then on public Nano nodes. Leave empty to use only the public nodes."
+        "description": "Optional but advised. A Nano node API key, for example from [Nanswap Nodes](https://nanswap.com/nano-node); read the provider's terms first (some free keys are for personal use only). Payments are checked there first, then on public Nano nodes. Leave empty to use only the public nodes."
       }
     }
   },

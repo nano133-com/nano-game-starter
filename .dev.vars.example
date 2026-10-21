@@ -2,7 +2,8 @@
 # On Cloudflare, add each one with `npx wrangler secret put NAME`, or in the dashboard
 # (Workers & Pages > your game > Settings > Variables and Secrets). Never commit a real value.
 
-# Optional but advised: a free Nanswap Nodes API key (https://nanswap.com/nano-node).
+# Optional but advised: a Nano node API key, for example Nanswap Nodes (https://nanswap.com/nano-node).
+# Read the provider's terms first: some free keys are for personal use only.
 # Payments are checked there first, then on public Nano nodes.
 NODE_API_KEY=
 

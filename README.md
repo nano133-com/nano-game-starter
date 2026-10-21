@@ -25,15 +25,18 @@ straight to your own wallet. You change the game with your AI assistant.
    own address is set, every pay screen says **TEST MODE: DO NOT PAY**. Open `/admin` and sign in with
    Berry Wallet: only your own address can open it.
 4. **Turn on the protections.** In the Cloudflare dashboard (Workers & Pages, your game, Settings,
-   Variables and Secrets), add a free [Nanswap Nodes](https://nanswap.com/nano-node) key as the secret
-   `NODE_API_KEY`, and a free [Turnstile](https://dash.cloudflare.com/?to=/:account/turnstile) widget
-   (`TURNSTILE_SITE_KEY` and the secret `TURNSTILE_SECRET`). The admin page tells you what is still off.
+   Variables and Secrets), add a Nano node API key as the secret `NODE_API_KEY` (for example
+   [Nanswap Nodes](https://nanswap.com/nano-node); read the provider's terms first, because some free keys
+   are for personal use only), and a free [Turnstile](https://dash.cloudflare.com/?to=/:account/turnstile)
+   widget (`TURNSTILE_SITE_KEY` and the secret `TURNSTILE_SECRET`). The admin page tells you what is still
+   off. Without a key, the game checks payments on public Nano nodes.
 5. **Make it yours.** Open your copy on GitHub with your AI assistant (Claude Code, Codex, Cursor and
    others). Ask for a new level, new looks or new rules. It reads `AGENTS.md` first. Each change you
    push to GitHub goes live by itself. A ready prompt is in `ai/PROMPT.md`.
 6. **Sell, and get listed.** Set `TEST_MODE` to `off`, buy a cheap look yourself, and check `/admin`.
-   Then send your game's listing address (`https://<your game>/nano-game.json`) to Nano Island. Nano
-   Island lists your game; the sale stays with you.
+   Your game's listing file is at `https://<your game>/nano-game.json`. When the Nano Island creator
+   program opens ([nano133.com/build/islands](https://nano133.com/build/islands)), Nano Island lists your
+   game from that file; the sale stays with you.
 
 ## What it costs
 
