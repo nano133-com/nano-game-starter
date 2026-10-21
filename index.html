@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#8fd8ff" />
+    <title>%GAME_NAME%</title>
+    <meta name="description" content="%GAME_LINE%" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="view" class="view" aria-label="The game"></div>
+      <div id="stick" class="stick" hidden><div id="stick-knob" class="stick-knob"></div></div>
+
+      <header class="hud">
+        <div class="hud-left">
+          <div class="pill score" aria-live="polite"><span class="gem-dot" aria-hidden="true"></span><span id="score">0</span></div>
+          <div class="pill time" id="time" aria-label="Time left">1:00</div>
+          <span id="test-flag" class="pill test-flag" hidden>Test mode</span>
+        </div>
+        <div class="hud-right">
+          <button id="looks-btn" class="btn btn-hud" type="button">Looks</button>
+          <button id="account-btn" class="btn btn-hud" type="button">Sign in</button>
+        </div>
+      </header>
+
+      <button id="jump-btn" class="jump" type="button" aria-label="Jump">Jump</button>
+
+      <section id="start" class="overlay">
+        <div class="card">
+          <h1>%GAME_NAME%</h1>
+          <p>%GAME_LINE%</p>
+          <button id="play" class="btn btn-primary btn-big" type="button">Play</button>
+          <ul class="how">
+            <li><strong>Phone:</strong> left thumb moves, right thumb turns the camera, Jump to jump.</li>
+            <li><strong>Computer:</strong> WASD or arrows move, drag the mouse to look, Space jumps.</li>
+          </ul>
+          <p id="best" class="best"></p>
+        </div>
+      </section>
+
+      <section id="end" class="overlay" hidden>
+        <div class="card">
+          <h2>Time is up</h2>
+          <p class="big-score"><span id="end-score">0</span> gems</p>
+          <p id="end-best" class="best"></p>
+          <button id="again" class="btn btn-primary btn-big" type="button">Play again</button>
+          <button id="end-looks" class="btn" type="button">Looks</button>
+        </div>
+      </section>
+    </div>
+    <script type="module" src="/src/client/main.ts"></script>
+  </body>
+</html>

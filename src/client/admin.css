@@ -1,0 +1,181 @@
+/* The admin page scrolls like a normal page (the game page does not). */
+
+html:has(.admin-page),
+body.admin-page {
+  height: auto;
+  overflow: auto;
+  background: #f3f7fb;
+}
+
+.admin {
+  width: min(900px, 100%);
+  margin: 0 auto;
+  padding: max(16px, env(safe-area-inset-top)) 16px 40px;
+}
+
+.admin-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.admin-head h1 {
+  margin: 0;
+  font-size: clamp(22px, 5vw, 30px);
+}
+
+.admin-card {
+  margin: 12px 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.admin-card h2 {
+  margin: 0 0 10px;
+  font-size: 19px;
+}
+
+.card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.card-head h2 {
+  margin: 0;
+}
+
+.warnings {
+  border-color: #f2b8c1;
+  background: #fff4f6;
+}
+
+.warnings ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.total {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.total span {
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+
+.total strong {
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.tab {
+  flex: none;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  font: 700 14px/1 var(--font);
+  cursor: pointer;
+}
+
+.tab-on {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fff;
+}
+
+.order {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.order-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.order-amount {
+  margin: 4px 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eef1f4;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.badge-paid {
+  background: #dcf8ef;
+  color: #0b6d5a;
+}
+
+.badge-open {
+  background: #e3f1ff;
+  color: #134e86;
+}
+
+.badge-paid_late {
+  background: #ffe3e8;
+  color: #a1122a;
+}
+
+.late-note {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #fff4f6;
+  font-size: 14px;
+}
+
+.late-note code,
+.player code,
+.admin-card code {
+  word-break: break-all;
+  font-size: 12px;
+}
+
+.hash {
+  word-break: break-all;
+}
+
+.player {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex" />
+    <title>Admin · %GAME_NAME%</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body class="admin-page">
+    <main id="admin" class="admin">
+      <header class="admin-head">
+        <h1>%GAME_NAME% · Admin</h1>
+        <a class="btn btn-small" href="/">Back to the game</a>
+      </header>
+      <section id="gate" class="admin-card" aria-live="polite"></section>
+      <section id="data" hidden></section>
+    </main>
+    <script type="module" src="/src/client/admin.ts"></script>
+  </body>
+</html>
