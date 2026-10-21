@@ -76,6 +76,10 @@ describe("the node list", () => {
     expect(PUBLIC_NODES.every((n) => !n.headers)).toBe(true);
   });
 
+  it('skips the keyed provider when its secret is "none" or a space (the setup page needs a value)', () => {
+    for (const v of ["none", "NONE", " ", "", "skip", "off", "-"]) expect(nodesFor({ NODE_API_KEY: v }), JSON.stringify(v)).toEqual(PUBLIC_NODES);
+  });
+
   it("takes the creator's own list: https, or http only on this computer", () => {
     const own = nodesFor({ NANO_NODES: "https://node.example.com/rpc, http://evil.example.com, http://127.0.0.1:8792, ftp://x" });
     expect(own.map((n) => n.url)).toEqual(["https://node.example.com/rpc", "http://127.0.0.1:8792"]);

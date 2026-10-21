@@ -2,7 +2,7 @@
 // TURNSTILE_SITE_KEY and the secret TURNSTILE_SECRET are set; without them it is skipped, and the admin page
 // says so.
 
-import { turnstileOn, type Env } from "./env";
+import { setting, turnstileOn, type Env } from "./env";
 import type { Fetch } from "./price";
 
 const VERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
@@ -12,7 +12,7 @@ export async function turnstileOk(env: Env, token: unknown, ip: string | null, f
   if (!turnstileOn(env)) return true;
   if (typeof token !== "string" || !token || token.length > 2048) return false;
   const form = new FormData();
-  form.append("secret", env.TURNSTILE_SECRET!.trim());
+  form.append("secret", setting(env.TURNSTILE_SECRET)!);
   form.append("response", token);
   if (ip) form.append("remoteip", ip);
   try {

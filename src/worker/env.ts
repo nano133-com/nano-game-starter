@@ -36,6 +36,16 @@ export function testMode(env: Env): boolean {
   return receiveAddress(env) === null || /^(on|true|1|yes)$/i.test((env.TEST_MODE ?? "").trim());
 }
 
+/**
+ * An optional setting or secret (NODE_API_KEY, TURNSTILE_SECRET, TURNSTILE_SITE_KEY): its value without spaces
+ * around it, or undefined when it is not set. The "Deploy to Cloudflare" setup page needs a value in every
+ * field, so "none", "skip", "off" and "-" (in any case) also mean "not set".
+ */
+export function setting(v?: string): string | undefined {
+  const s = (v ?? "").trim();
+  return s && !/^(none|skip|off|-)$/i.test(s) ? s : undefined;
+}
+
 export function turnstileOn(env: Env): boolean {
-  return Boolean(env.TURNSTILE_SECRET?.trim() && env.TURNSTILE_SITE_KEY?.trim());
+  return Boolean(setting(env.TURNSTILE_SECRET) && setting(env.TURNSTILE_SITE_KEY));
 }

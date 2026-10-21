@@ -3,6 +3,7 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { EXAMPLE_ADDRESS, type Env } from "../src/worker/env";
+import { KEYED_NODE, PUBLIC_NODES } from "../src/worker/nodes";
 import { createSession } from "../src/worker/signin";
 import { Browser, ORIGIN } from "./api";
 import { makeDb, testAccount } from "./helpers";
@@ -48,6 +49,25 @@ describe("the admin guard", () => {
     expect(r.status).toBe(200);
     expect(r.body).toMatchObject({ address: owner.address, testMode: false, counts: { open: 0, paid: 0, expired: 0, paid_late: 0 } });
     expect(r.body.warnings.join(" ")).toMatch(/Turnstile is OFF/);
+  });
+
+  it('warns about each optional secret left as "none" or a space, and not once it is set', async () => {
+    const admin = await signedIn(owner.address);
+    const skipped = await admin.call({ ...live(), NODE_API_KEY: "none", TURNSTILE_SECRET: " ", TURNSTILE_SITE_KEY: "NONE" }, "/api/admin/summary");
+    expect(skipped.status).toBe(200);
+    expect(skipped.body).toMatchObject({ turnstile: false, nodes: PUBLIC_NODES.map((n) => n.name) });
+    expect(skipped.body.warnings.join(" ")).toMatch(/No NODE_API_KEY/);
+    expect(skipped.body.warnings.join(" ")).toMatch(/Turnstile is OFF: sign-in and orders are not checked/);
+
+    const half = await admin.call({ ...live(), TURNSTILE_SECRET: "none", TURNSTILE_SITE_KEY: "test-site-not-real" }, "/api/admin/summary");
+    expect(half.body.warnings.join(" ")).toMatch(/Turnstile is OFF: set both/);
+
+    const set = { ...live(), NODE_API_KEY: "test-key-not-real", TURNSTILE_SECRET: "test-secret-not-real", TURNSTILE_SITE_KEY: "test-site-not-real" };
+    const all = await admin.call(set, "/api/admin/summary");
+    expect(all.body).toMatchObject({ turnstile: true, nodes: [KEYED_NODE.name, ...PUBLIC_NODES.map((n) => n.name)] });
+    expect(all.body.warnings.join(" ")).not.toMatch(/NODE_API_KEY|Turnstile/);
+    expect((await new Browser().call(set, "/api/config")).body.turnstileSiteKey).toBe("test-site-not-real");
+    expect((await new Browser().call({ ...set, TURNSTILE_SITE_KEY: "none" }, "/api/config")).body.turnstileSiteKey).toBeNull();
   });
 
   it("asks the creator to sign in again after a day", async () => {

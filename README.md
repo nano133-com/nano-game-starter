@@ -20,16 +20,18 @@ straight to your own wallet. You change the game with your AI assistant.
    and copy your address (it starts with `nano_`).
 2. **Click "Deploy to Cloudflare"** (above). Sign in to GitHub and Cloudflare (both are free).
    Cloudflare copies this project into your GitHub account, makes the database, and puts the game
-   online. On the setup page, paste your address into `RECEIVE_ADDRESS`.
+   online. On the setup page, paste your address into `RECEIVE_ADDRESS`. The setup page also asks for
+   `NODE_API_KEY` and `TURNSTILE_SECRET`: type `none` in each to skip it for now (step 4 adds them later).
 3. **Try it in test mode.** Open your game's address (`https://<name>.<you>.workers.dev`). Until your
    own address is set, every pay screen says **TEST MODE: DO NOT PAY**. Open `/admin` and sign in with
    the wallet that holds your address: only your own address can open it.
 4. **Turn on the protections.** In the Cloudflare dashboard (Workers & Pages, your game, Settings,
-   Variables and Secrets), add a Nano node API key as the secret `NODE_API_KEY` (for example
-   [Nanswap Nodes](https://nanswap.com/nano-node); read the provider's terms first, because some free keys
-   are for personal use only), and a free [Turnstile](https://dash.cloudflare.com/?to=/:account/turnstile)
-   widget (`TURNSTILE_SITE_KEY` and the secret `TURNSTILE_SECRET`). The admin page tells you what is still
-   off. Without a key, the game checks payments on public Nano nodes.
+   Variables and Secrets), put a Nano node API key in the secret `NODE_API_KEY`, in place of `none` (for
+   example [Nanswap Nodes](https://nanswap.com/nano-node); read the provider's terms first, because some free
+   keys are for personal use only), and the keys of a free
+   [Turnstile](https://dash.cloudflare.com/?to=/:account/turnstile) widget in `TURNSTILE_SITE_KEY` and the
+   secret `TURNSTILE_SECRET`. The admin page tells you what is still off. Without a key, the game checks
+   payments on public Nano nodes.
 5. **Make it yours.** Open your copy on GitHub with your AI assistant (Claude Code, Codex, Cursor and
    others). Ask for a new level, new looks or new rules. It reads `AGENTS.md` first. Each change you
    push to GitHub goes live by itself. A ready prompt is in `ai/PROMPT.md`.

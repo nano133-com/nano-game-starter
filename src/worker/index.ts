@@ -6,7 +6,7 @@ import { nanoUri, priceRaw, xnoText } from "../shared/amount";
 import { CONFIG } from "../shared/config";
 import { lookById } from "../shared/looks";
 import { adminGuard, adminSummary } from "./admin";
-import { receiveAddress, testMode, turnstileOn, type Env } from "./env";
+import { receiveAddress, setting, testMode, turnstileOn, type Env } from "./env";
 import { fail, json, readJson, sameOrigin, secure, visitorIp } from "./http";
 import { Busy, MAX_OPEN_PER_PLAYER, orderById, orderView, reserve, type OrderRow } from "./orders";
 import { PRICE_FEEDS, usdPerXno } from "./price";
@@ -115,7 +115,7 @@ export async function handleApi(req: Request, env: Env, now = Date.now()): Promi
       name: CONFIG.name,
       creator: CONFIG.creator.name,
       testMode: testMode(env),
-      turnstileSiteKey: turnstileOn(env) ? env.TURNSTILE_SITE_KEY!.trim() : null,
+      turnstileSiteKey: turnstileOn(env) ? setting(env.TURNSTILE_SITE_KEY)! : null,
     });
   }
 

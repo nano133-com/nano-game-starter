@@ -4,7 +4,7 @@
 
 import { xnoText } from "../shared/amount";
 import { lookById } from "../shared/looks";
-import { receiveAddress, testMode, turnstileOn, type Env } from "./env";
+import { receiveAddress, setting, testMode, turnstileOn, type Env } from "./env";
 import { fail } from "./http";
 import { nodesFor } from "./nodes";
 import type { OrderRow } from "./orders";
@@ -54,11 +54,11 @@ export async function adminSummary(env: Env, now = Date.now()) {
   if (testMode(env)) warnings.push(receiveAddress(env) ? "Test mode is on (TEST_MODE). Pay screens say TEST MODE: DO NOT PAY." : "Test mode: no receive address is set.");
   if (!turnstileOn(env))
     warnings.push(
-      env.TURNSTILE_SECRET || env.TURNSTILE_SITE_KEY
+      setting(env.TURNSTILE_SECRET) || setting(env.TURNSTILE_SITE_KEY)
         ? "Turnstile is OFF: set both TURNSTILE_SITE_KEY and the secret TURNSTILE_SECRET."
         : "Turnstile is OFF: sign-in and orders are not checked for bots. Add a free Turnstile widget (see README).",
     );
-  if (!env.NODE_API_KEY) warnings.push("No NODE_API_KEY: payments are checked on public Nano nodes only, which promise no uptime.");
+  if (!setting(env.NODE_API_KEY)) warnings.push("No NODE_API_KEY: payments are checked on public Nano nodes only, which promise no uptime.");
   if (count.paid_late === 1) warnings.push('1 payment came late. Send it back by hand from your wallet (see "Paid late").');
   if (count.paid_late > 1) warnings.push(`${count.paid_late} payments came late. Send each one back by hand from your wallet (see "Paid late").`);
 

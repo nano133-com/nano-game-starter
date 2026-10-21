@@ -8,7 +8,7 @@
 // one is asked. When none answers, the check fails closed: nothing is credited, and the order waits.
 
 import type { Fetch } from "./price";
-import type { Env } from "./env";
+import { setting, type Env } from "./env";
 
 export type NanoNode = { name: string; url: string; headers?: Record<string, string> };
 
@@ -24,7 +24,7 @@ export const PUBLIC_NODES: NanoNode[] = [
 
 export function nodesFor(env: Pick<Env, "NODE_API_KEY" | "NANO_NODES">): NanoNode[] {
   const list: NanoNode[] = [];
-  const key = env.NODE_API_KEY?.trim();
+  const key = setting(env.NODE_API_KEY);
   if (key) list.push({ name: KEYED_NODE.name, url: KEYED_NODE.url, headers: { [KEYED_NODE.keyHeader]: key } });
   const own = (env.NANO_NODES ?? "")
     .split(",")
