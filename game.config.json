@@ -1,0 +1,10 @@
+{
+  "name": "Gem Island",
+  "line": "Run, jump and grab gems on a tiny island before the clock runs out.",
+  "creator": { "name": "Your name" },
+  "art": { "wide": "/art/wide.jpg", "tall": "/art/tall.jpg" },
+  "multiplayer": false,
+  "regions": ["Global"],
+  "ages": "18+",
+  "round": { "seconds": 60, "gems": 10, "goldEvery": 8 }
+}

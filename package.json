@@ -1,0 +1,63 @@
+{
+  "name": "nano-game-starter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A small 3D game that sells looks for Nano (XNO), on your own Cloudflare account. No keys on the server.",
+  "license": "MIT",
+  "author": "Pugs, LLC",
+  "homepage": "https://github.com/nano133-com/nano-game-starter",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build && wrangler d1 migrations apply DB --local && wrangler dev --local",
+    "deploy": "vite build && wrangler d1 migrations apply DB --remote && wrangler deploy",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
+    "check": "npm run typecheck && npm test && npm run build",
+    "types": "wrangler types src/worker/env.d.ts --include-runtime false",
+    "bench:signin": "node bench/run.mjs"
+  },
+  "cloudflare": {
+    "bindings": {
+      "DB": {
+        "description": "The database for orders, owned looks and sign-ins. Cloudflare makes it for you."
+      },
+      "RECEIVE_ADDRESS": {
+        "description": "**Your own Nano address** (from Berry Wallet: Receive, then Copy). Players pay you here, and only this address can open `/admin`. Leave the example address to keep the game in test mode: every pay screen then says **TEST MODE: DO NOT PAY**."
+      },
+      "TEST_MODE": {
+        "description": "`on` keeps every pay screen in test mode, even with your own address. Set `off` when you are ready to sell."
+      },
+      "TURNSTILE_SITE_KEY": {
+        "description": "Optional. The public site key of a free [Cloudflare Turnstile](https://dash.cloudflare.com/?to=/:account/turnstile) widget for your game's address. Leave empty to skip it (the admin page then shows a warning)."
+      },
+      "TURNSTILE_SECRET": {
+        "description": "Optional. The secret key of the same Turnstile widget. Leave empty to skip it."
+      },
+      "NODE_API_KEY": {
+        "description": "Optional but advised. A free API key from [Nanswap Nodes](https://nanswap.com/nano-node). Payments are checked there first, then on public Nano nodes. Leave empty to use only the public nodes."
+      }
+    }
+  },
+  "dependencies": {
+    "@nano133/signin": "^0.4.0",
+    "qrcode-generator": "2.0.4",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261006.1",
+    "@noble/curves": "2.4.0",
+    "@noble/hashes": "2.4.0",
+    "@types/node": "24.19.0",
+    "@types/three": "0.186.0",
+    "miniflare": "5.20261006.1-alpha",
+    "nanocurrency-web": "2.0.0",
+    "typescript": "5.9.3",
+    "vite": "8.3.4",
+    "vitest": "5.0.3",
+    "wrangler": "4.149.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

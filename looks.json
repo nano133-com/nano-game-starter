@@ -1,0 +1,8 @@
+[
+  { "id": "classic", "name": "Classic", "priceUsd": 0, "change": { "body": "#4aa8ff" } },
+  { "id": "sunset", "name": "Sunset", "priceUsd": 0.25, "change": { "body": "#ff8a3d" } },
+  { "id": "mint-cap", "name": "Mint Cap", "priceUsd": 0.25, "change": { "body": "#3ddc97", "hat": "cap", "hatColor": "#1c6e4f" } },
+  { "id": "berry-beanie", "name": "Berry Beanie", "priceUsd": 0.5, "change": { "body": "#e0457b", "hat": "beanie", "hatColor": "#6a2bd9" } },
+  { "id": "royal", "name": "Royal", "priceUsd": 1, "change": { "body": "#7b5cff", "hat": "crown", "hatColor": "#ffd23f" } },
+  { "id": "top-hat", "name": "Top Hat", "priceUsd": 1, "change": { "body": "#e9e4d8", "hat": "tophat", "hatColor": "#22242e" } }
+]

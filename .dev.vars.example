@@ -1,0 +1,10 @@
+# Secrets for local development. Copy this file to .dev.vars (which git ignores) and fill it in.
+# On Cloudflare, add each one with `npx wrangler secret put NAME`, or in the dashboard
+# (Workers & Pages > your game > Settings > Variables and Secrets). Never commit a real value.
+
+# Optional but advised: a free Nanswap Nodes API key (https://nanswap.com/nano-node).
+# Payments are checked there first, then on public Nano nodes.
+NODE_API_KEY=
+
+# Optional: the secret key of a Cloudflare Turnstile widget (its site key is TURNSTILE_SITE_KEY).
+TURNSTILE_SECRET=

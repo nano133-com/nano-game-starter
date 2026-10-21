@@ -1,0 +1,51 @@
+// The Cloudflare setup of your game. The "Deploy to Cloudflare" button reads this file.
+// Docs: https://developers.cloudflare.com/workers/wrangler/configuration/
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nano-game-starter",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // The game itself: files that `npm run build` writes. Cloudflare serves them for free, without
+  // running the Worker. Their security headers come from public/_headers (made by the build).
+  "assets": {
+    "directory": "./dist/client",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "none"
+  },
+
+  // Orders, owned looks, sign-ins and sessions. `npm run deploy` applies the migrations first.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "nano-game-starter",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // Every 10 minutes: look for payments that arrived while nobody had the pay screen open.
+  // It asks a Nano node only when an order is waiting.
+  "triggers": { "crons": ["*/10 * * * *"] },
+
+  "vars": {
+    // Your own Nano address (Berry Wallet: Receive, then Copy). Players pay you here, and only this
+    // address can open /admin. This example address belongs to nobody: while it stays, the game is in
+    // test mode and every pay screen says "TEST MODE: DO NOT PAY".
+    "RECEIVE_ADDRESS": "nano_1111111111111111111111111111111111111111111111111111hifc8npp",
+    // "on" keeps test mode even with your own address. "off" sells for real.
+    "TEST_MODE": "off",
+    // Optional: the public site key of a Cloudflare Turnstile widget (its secret is TURNSTILE_SECRET).
+    "TURNSTILE_SITE_KEY": ""
+  },
+  // Secrets are never written here. Add them with `npx wrangler secret put <NAME>` or in the
+  // dashboard: NODE_API_KEY (a free Nanswap Nodes key) and TURNSTILE_SECRET. See .dev.vars.example.
+
+  // A spending limit per request. Cloudflare accepts it on the Workers Paid plan only; on the Free
+  // plan the limit is fixed at 10 ms of CPU and 50 outside calls, so leave it off there.
+  // On Paid, remove the two slashes in front of each line:
+  // "limits": { "cpu_ms": 50, "subrequests": 50 },
+
+  "observability": { "enabled": true }
+}
