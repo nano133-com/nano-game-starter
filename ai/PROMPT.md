@@ -20,6 +20,7 @@ While you work:
 - Make one change at a time. After each one, run `npm run check`, then `npm run dev`, and tell me what
   to look at on http://localhost:8787 (on a phone-sized window first, then a computer).
 - Keep the game working on phones: the thumbstick on the left, the camera on the right, the Jump button.
+- Players sign in with Berry Wallet, NanChat or Nautilus. Keep all three.
 - Looks only change how the character looks. Every look shows its price. Never add random items, loot
   boxes or anything a player buys without knowing what it is.
 - Never change the `id` of a look that someone may already own.

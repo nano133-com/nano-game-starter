@@ -76,8 +76,11 @@ the risk first, then change it only with tests in `test/` that show the new rule
    link. A payment to an address nobody holds the key for is lost for good.
 5. **The admin guard** (`src/worker/admin.ts`): only the creator's own `RECEIVE_ADDRESS`, signed in
    with Nano within the last day, can read `/api/admin/*`.
-6. **Sign-in** (`src/worker/signin.ts`, the `@nano133/signin` package): the signed text names the
-   game's domain; only the browser that started a sign-in gets the session; one session per sign-in.
+6. **Sign-in** (`src/worker/signin.ts`, the `@nano133/signin` package): players sign in with Berry
+   Wallet, NanChat or Nautilus. The signed text names the game's domain; only the browser that started a
+   sign-in gets the session; one session per sign-in. Whichever wallet signs, only `RECEIVE_ADDRESS` opens
+   `/admin`. NanChat's answers all come through its relay server, so their limits are totals and per
+   sign-in, never per visitor.
 7. **Security headers and CORS** (`src/shared/security.ts`, `src/worker/http.ts`): a strict Content
    Security Policy; calls that change something must come from the game's own pages. Do not loosen
    them to make a feature work: find another way.
@@ -93,8 +96,10 @@ the risk first, then change it only with tests in `test/` that show the new rule
   ("Check payments now"), and by a cron every 10 minutes.
 - Prices: the median of CoinGecko, Kraken and KuCoin (no keys). CoinGecko's terms ask for "Powered by
   CoinGecko" on the pay screen: keep it.
-- Workers Free allows 10 ms of CPU per request. One signature check takes about 0.4 ms;
-  `src/worker/warm.ts` moves the curve's first-use cost to the Worker's start-up.
-  `npm run bench:signin` measures it.
+- Workers Free allows 10 ms of CPU per request. One signature check takes about 0.4 ms (Berry Wallet,
+  Nautilus) or 2 ms (NanChat); `src/worker/warm.ts` moves each kind's first-use cost to the Worker's
+  start-up. `npm run bench:signin` measures it.
+- The Nautilus app and NanChat's relay server post to `/api/signin/nautilus` and `/api/signin/nanchat`.
+  If a firewall rule (for example Bot Fight Mode) stands in front of the game, it must let them through.
 - `/nano-game.json` is the listing for Nano Island. It never lists looks or prices.
 - `window.__gemIsland.snapshot()` gives the game's state to automated browser checks.

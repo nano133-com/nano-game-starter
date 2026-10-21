@@ -23,7 +23,7 @@ straight to your own wallet. You change the game with your AI assistant.
    online. On the setup page, paste your address into `RECEIVE_ADDRESS`.
 3. **Try it in test mode.** Open your game's address (`https://<name>.<you>.workers.dev`). Until your
    own address is set, every pay screen says **TEST MODE: DO NOT PAY**. Open `/admin` and sign in with
-   Berry Wallet: only your own address can open it.
+   the wallet that holds your address: only your own address can open it.
 4. **Turn on the protections.** In the Cloudflare dashboard (Workers & Pages, your game, Settings,
    Variables and Secrets), add a Nano node API key as the secret `NODE_API_KEY` (for example
    [Nanswap Nodes](https://nanswap.com/nano-node); read the provider's terms first, because some free keys
@@ -53,7 +53,8 @@ read on 2026-10-21; they can change.
 
 ## How a sale works
 
-1. A player signs in with Nano (Berry Wallet signs a short message; no password, no payment).
+1. A player signs in with Nano: Berry Wallet, NanChat or Nautilus signs a short message (no password, no
+   payment).
 2. The player picks a look. The game turns its US dollar price into XNO with public price feeds and
    asks for a **clean amount** with at most 4 decimals (for example `0.2778 XNO`). While another order
    waits with that amount, the next order asks 0.0001 XNO more, so every waiting order has its own

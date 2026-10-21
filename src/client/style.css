@@ -580,6 +580,82 @@ body {
   margin: 8px auto 12px;
 }
 
+.signin-ask {
+  margin: 14px 0 8px;
+  font-weight: 700;
+}
+
+/* The wallets: three tiles in one row, also on a small phone. */
+.wallet-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.wallet-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 104px;
+  padding: 12px 6px;
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+  font: 700 15px/1.2 var(--font);
+  text-align: center;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.wallet-tile:first-child {
+  border-color: var(--gem-dark);
+  background: #e6fbf5;
+}
+
+.wallet-tile:focus-visible {
+  outline: 3px solid var(--sea);
+  outline-offset: 2px;
+}
+
+.wallet-tile:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.wallet-mark {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--paper);
+  font: 800 16px/1 var(--font);
+}
+
+.wallet-name {
+  overflow-wrap: anywhere;
+}
+
+.signin-back {
+  margin-left: -12px;
+}
+
+.signin-wallet {
+  margin: 4px 0 8px;
+  font-size: 19px;
+}
+
+.signin-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 18px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
 .turnstile {
   margin: 10px 0;
 }

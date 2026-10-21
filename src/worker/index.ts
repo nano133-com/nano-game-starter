@@ -1,6 +1,7 @@
 // The game's Worker: the API under /api, the listing at /nano-game.json, and the payment scan every
 // 10 minutes. The game's files (index.html, admin.html, /assets) are served by Cloudflare without it.
 
+import { nautilusReply } from "@nano133/signin";
 import { nanoUri, priceRaw, xnoText } from "../shared/amount";
 import { CONFIG } from "../shared/config";
 import { lookById } from "../shared/looks";
@@ -10,7 +11,7 @@ import { fail, json, readJson, sameOrigin, secure, visitorIp } from "./http";
 import { Busy, MAX_OPEN_PER_PLAYER, orderById, orderView, reserve, type OrderRow } from "./orders";
 import { PRICE_FEEDS, usdPerXno } from "./price";
 import { d1Limit, LIMITS, memoryLimit, visitorKey } from "./ratelimit";
-import { checkSignin, sessionOf, signOut, startSignin, walletRoute } from "./signin";
+import { checkSignin, nanchatRoute, nautilusRoute, sessionOf, signOut, startSignin, walletRoute, wayOf } from "./signin";
 import { sweep } from "./sweep";
 import { turnstileOk } from "./turnstile";
 import { warm } from "./warm";
@@ -90,12 +91,18 @@ export async function handleApi(req: Request, env: Env, now = Date.now()): Promi
     return new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": origin, "Access-Control-Allow-Methods": "GET, POST", "Access-Control-Allow-Headers": "Content-Type", Vary: "Origin" } });
   }
 
-  // The wallet app's routes: no cookie and no Origin (it is not a browser page).
+  // The wallet apps' routes: no cookie and no Origin (an app, or NanChat's relay server, posts them: not a browser page).
   const wallet = path.match(/^\/api\/signin\/nano\/([0-9a-f]{32})$/);
   if (wallet && (method === "GET" || method === "POST")) {
     if (!memoryLimit(`wallet|${ip}`, LIMITS.wallet.limit, LIMITS.wallet.windowMs, now)) return fail(429, "Too many requests.");
-    return walletRoute(db, req, wallet[1]!, () => now);
+    return walletRoute(env, req, wallet[1]!, () => now);
   }
+  if (path === "/api/signin/nautilus" && method === "POST") {
+    // Nautilus shows the words of a refusal only with HTTP 200.
+    if (!memoryLimit(`wallet|${ip}`, LIMITS.wallet.limit, LIMITS.wallet.windowMs, now)) return json(nautilusReply(url.host, "Too many requests. Wait a minute."));
+    return nautilusRoute(env, req, () => now);
+  }
+  if (path === "/api/signin/nanchat" && method === "POST") return nanchatRoute(env, req, now);
 
   const pollRoute = path === "/api/signin/check" || /^\/api\/orders\/[0-9a-f]{24}\/check$/.test(path);
   const limit = pollRoute ? LIMITS.poll : LIMITS.other;
@@ -114,11 +121,18 @@ export async function handleApi(req: Request, env: Env, now = Date.now()): Promi
 
   if (method === "POST" && path === "/api/signin/start") {
     const body = await readJson(req);
+    const way = wayOf(body.way);
+    if (!way) return fail(400, "That wallet is not one of this game's.");
     if (!(await d1Limit(db, `signin|${await visitorKey(db, req)}`, LIMITS.signinStart.limit, LIMITS.signinStart.windowMs, now))) return fail(429, "Too many sign-ins. Wait a few minutes.");
     if (!(await turnstileOk(env, body.turnstile, req.headers.get("CF-Connecting-IP")))) return fail(403, "The person check failed. Try again.");
-    return startSignin(db, req, () => now);
+    return startSignin(env, req, way, () => now);
   }
-  if (method === "POST" && path === "/api/signin/check") return checkSignin(db, req, (await readJson(req)).id, now);
+  if (method === "POST" && path === "/api/signin/check") {
+    const body = await readJson(req);
+    const way = wayOf(body.way);
+    if (!way) return fail(400, "That wallet is not one of this game's.");
+    return checkSignin(db, req, body.id, way, now);
+  }
   if (method === "POST" && path === "/api/signout") return signOut(db, req);
 
   const session = await sessionOf(db, req, now);

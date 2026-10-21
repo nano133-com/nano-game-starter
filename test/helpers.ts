@@ -10,7 +10,7 @@ import { blake2b } from "@noble/hashes/blake2.js";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import * as nanoNs from "nanocurrency-web";
 
-const MIGRATIONS = ["migrations/0001_init.sql"];
+const MIGRATIONS = ["migrations/0001_init.sql", "migrations/0002_wallet_apps.sql"];
 
 /** A fresh, empty D1 database with the game's tables. */
 export async function makeDb(): Promise<{ db: D1Database; close: () => Promise<void> }> {
@@ -54,6 +54,29 @@ export function berryAnswer(request: Record<string, string>, account: { address:
   const digest = new Uint8Array(createHash("sha256").update(message, "utf8").digest());
   return { protocol: "nano-signin-v1", requestId: request.requestId, address: account.address, signatureType: "nano-ed25519-blake2b-sha256", message, signature: signBytes(account.privateKey, digest) };
 }
+
+type Account = { address: string; privateKey: string };
+
+/** The JSON inside a nanoauth: link: what Nautilus reads (its label, the site's address, where to post). */
+export const nanoauthItem = (link: string): { label: string; message: string; account: string; method: { type: string; url: string } } =>
+  JSON.parse(Buffer.from(link.replace(/^nanoauth:/, ""), "base64url").toString("utf8"));
+
+/** What Nautilus posts: "<seconds>:<label>:<site address>", signed over its UTF-8 bytes as a block hash is signed. */
+export function nautilusAnswer(item: { label: string; account: string }, account: Account, nowMs = Date.now()) {
+  const formatted = `${Math.floor(nowMs / 1000)}:${item.label}:${item.account}`;
+  const bytes = new Uint8Array(Buffer.from(formatted, "utf8"));
+  return { account: account.address, signature: signBytes(account.privateKey, bytes), signed: Buffer.from(formatted, "utf8").toString("hex"), formatted, message: "x", label: item.label };
+}
+
+/** The text to sign and the answer address in a NanChat link (each URL-encoded once, as NanChat's page builds it). */
+export function nanauthOf(link: string): { message: string; url: string } {
+  const m = /[?&]message=([^&]*)&url=(.*)$/.exec(link);
+  if (!m) throw new Error(`not a NanChat link: ${link}`);
+  return { message: decodeURIComponent(m[1]!), url: decodeURIComponent(m[2]!) };
+}
+
+/** What NanChat's relay posts: the account, and the text signed with "Signed Message: " in front (the library's sign()). */
+export const nanchatAnswer = (message: string, account: Account) => ({ account: account.address, signature: nanoWeb.tools.sign(account.privateKey, `Signed Message: ${message}`), message });
 
 export const hash64 = () => randomBytes(32).toString("hex").toUpperCase();
 

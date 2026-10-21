@@ -51,8 +51,16 @@ export const LIMITS = {
   signinStart: { limit: 20, windowMs: 10 * 60_000 },
   /** A new order, per visitor (D1). */
   order: { limit: 10, windowMs: 10 * 60_000 },
-  /** The wallet's GET and POST, per visitor (memory). */
+  /** The wallet app's calls (Berry Wallet's GET and POST, Nautilus's answer), per visitor (memory). */
   wallet: { limit: 30, windowMs: 60_000 },
+  /**
+   * NanChat's answers all come from NanChat's one relay server, so a limit per visitor would be one limit for every
+   * NanChat user. Its limits are totals: the whole route (memory), the answers of the right shape (D1), and the
+   * tries for one sign-in, by its nonce (D1).
+   */
+  nanchatRoute: { limit: 120, windowMs: 60_000 },
+  nanchatAll: { limit: 600, windowMs: 10 * 60_000 },
+  nanchatNonce: { limit: 5, windowMs: 10 * 60_000 },
   /** The browser's checks (sign-in every 2 s, payment every 5 s), per visitor (memory). */
   poll: { limit: 90, windowMs: 60_000 },
   /** Everything else under /api, per visitor (memory). */
