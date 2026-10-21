@@ -1,0 +1,7 @@
+// The bench Worker with the starter's warm-up at start-up (see src/worker/warm.ts). Local only.
+{
+  "name": "nano-game-starter-bench-warm",
+  "main": "signin-bench-warm.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"]
+}

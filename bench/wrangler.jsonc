@@ -1,0 +1,8 @@
+// A bench Worker that times the sign-in signature check inside workerd (the Workers runtime).
+// Run it: npm run bench:signin   (local only; never deploy it)
+{
+  "name": "nano-game-starter-bench",
+  "main": "signin-bench.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"]
+}
