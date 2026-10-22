@@ -36,8 +36,9 @@
     "RECEIVE_ADDRESS": "nano_1111111111111111111111111111111111111111111111111111hifc8npp",
     // "on" keeps test mode even with your own address. "off" sells for real.
     "TEST_MODE": "off",
-    // Optional: the public site key of a Cloudflare Turnstile widget (its secret is TURNSTILE_SECRET).
-    "TURNSTILE_SITE_KEY": ""
+    // Optional: the public site key of a Cloudflare Turnstile widget (its secret is TURNSTILE_SECRET). `none` (or
+    // empty) means not set.
+    "TURNSTILE_SITE_KEY": "none"
   },
   // Secrets are never written here. Add them with `npx wrangler secret put <NAME>` or in the
   // dashboard: NODE_API_KEY (a free Nanswap Nodes key) and TURNSTILE_SECRET. See .dev.vars.example.

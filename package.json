@@ -29,13 +29,7 @@
         "description": "`on` keeps every pay screen in test mode, even with your own address. Set `off` when you are ready to sell."
       },
       "TURNSTILE_SITE_KEY": {
-        "description": "Optional. The public site key of a free [Cloudflare Turnstile](https://dash.cloudflare.com/?to=/:account/turnstile) widget for your game's address. Type `none` to skip it (the admin page then shows a warning)."
-      },
-      "TURNSTILE_SECRET": {
-        "description": "Optional. The secret key of the same Turnstile widget. Type `none` to skip it."
-      },
-      "NODE_API_KEY": {
-        "description": "Optional but advised. A Nano node API key, for example from [Nanswap Nodes](https://nanswap.com/nano-node); read the provider's terms first (some free keys are for personal use only). Payments are checked there first, then on public Nano nodes. Type `none` to skip it and use only the public nodes."
+        "description": "Optional. Leave `none` for now. Later, the public site key of a free [Cloudflare Turnstile](https://dash.cloudflare.com/?to=/:account/turnstile) widget for your game's address, with its secret `TURNSTILE_SECRET` (README, step 4)."
       }
     }
   },
