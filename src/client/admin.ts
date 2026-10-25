@@ -69,7 +69,7 @@ async function load() {
       return;
     }
     const config = await get<Config>("/api/config").catch((): Config => ({ name: "", creator: "", testMode: true, turnstileSiteKey: null }));
-    const view = signInView(config, () => load());
+    const view = signInView(config, () => load(), "admin");
     gate.replaceChildren(h("h2", {}, "Sign in with your game's address"), h("p", {}, e.message), view.node);
   }
 }
@@ -81,7 +81,8 @@ function signOutButton() {
       class: "btn",
       type: "button",
       onclick: async () => {
-        await post("/api/signout").catch(() => null);
+        // Only the admin login: the game's login (another person, perhaps) stays.
+        await post("/api/signout", { scope: "admin" }).catch(() => null);
         load();
       },
     },

@@ -56,13 +56,12 @@ export async function walletAnswer(env: Env, way: Way, start: Record<string, any
   return walletCall(env, `/api/signin/nano/${start.id}`, berryAnswer(request, account, nanoSigninMessage(request, account.address)), now);
 }
 
-/** A new browser, signed in as `account` by wallet app `way`, through the game's own routes. */
-export async function signedInWith(env: Env, way: Way, account: Account) {
-  const browser = new Browser();
-  const start = await browser.call(env, "/api/signin/start", { body: { way } });
+/** A new browser, signed in as `account` by wallet app `way`, through the game's own routes. `scope` "admin" makes the /admin login (its own cookie). */
+export async function signedInWith(env: Env, way: Way, account: Account, scope: "play" | "admin" = "play", browser = new Browser()) {
+  const start = await browser.call(env, "/api/signin/start", { body: { way, scope } });
   if (start.status !== 200) throw new Error(`start: ${start.status} ${JSON.stringify(start.body)}`);
   await walletAnswer(env, way, start.body, account);
-  const check = await browser.call(env, "/api/signin/check", { body: { id: start.body.id, way } });
+  const check = await browser.call(env, "/api/signin/check", { body: { id: start.body.id, way, scope } });
   if (check.body?.status !== "signedin") throw new Error(`check: ${JSON.stringify(check.body)}`);
   return browser;
 }

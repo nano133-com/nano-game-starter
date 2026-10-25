@@ -21,9 +21,10 @@ const nameOf = (way: Way) => WALLETS.find((w) => w.way === way)!.name;
 
 /**
  * The sign-in, ready to put in a sheet. `onDone` gets the signed-in account; `stop()` ends the waiting (when the
- * sheet closes).
+ * sheet closes). `scope` is whose login it makes: "play" (the game's) or "admin" (/admin's own login, a different cookie, so the
+ * game and /admin can have different people signed in at once).
  */
-export function signInView(config: Config, onDone: (me: Me) => void): { node: HTMLElement; stop: () => void } {
+export function signInView(config: Config, onDone: (me: Me) => void, scope: "play" | "admin" = "play"): { node: HTMLElement; stop: () => void } {
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   /** The request that is waiting. Back keeps it: the person may have approved it already. */
@@ -53,7 +54,7 @@ export function signInView(config: Config, onDone: (me: Me) => void): { node: HT
     status.textContent = "Starting…";
     try {
       const turnstile = await personCheck(config.turnstileSiteKey, check);
-      const s = await post<Start>("/api/signin/start", { way, turnstile });
+      const s = await post<Start>("/api/signin/start", { way, turnstile, scope });
       current = s;
       showWallet(s);
       poll(s);
@@ -107,10 +108,11 @@ export function signInView(config: Config, onDone: (me: Me) => void): { node: HT
     if (stopped || current !== s) return;
     if (Date.now() > s.expiresAt + 5000) return again(s, "This sign-in expired.");
     try {
-      const r = await post<{ status: string; address?: string }>("/api/signin/check", { id: s.id, way: s.way });
+      const r = await post<{ status: string; address?: string }>("/api/signin/check", { id: s.id, way: s.way, scope });
       if (stopped || current !== s) return;
       if (r.status === "signedin" && r.address) {
-        const me = await get<Me>("/api/me");
+        // The admin login is not the game's: /api/me answers for the game's login, so the admin page gets just the address.
+        const me = scope === "admin" ? { address: r.address, owned: [], admin: true } : await get<Me>("/api/me");
         current = null;
         area.replaceChildren();
         status.textContent = `Signed in as ${shortAddress(r.address)}`;

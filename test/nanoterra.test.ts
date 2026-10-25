@@ -122,14 +122,22 @@ describe("Sign in from Nanoterra", () => {
   it("a session made here never opens /admin, even for the creator's own address", async () => {
     const { done } = await signIn(CODE, "203.0.113.13", nanoterra(200, answerOf({ address: owner.address, playerId: owner.address })));
     expect(done.status).toBe(303);
+    // The confirm screen makes the game's login only: it never sets, replaces or clears the admin login.
+    expect(done.headers.getSetCookie().filter((c) => /^(__Host-)?admin=/.test(c))).toEqual([]);
     const browser = new Browser();
     browser.jar.set("session", decodeURIComponent(pairOf(done, "session")!.slice("session=".length)));
     const me = await browser.call(env, "/api/me");
     expect(me.body).toMatchObject({ address: owner.address, via: "nanoterra", admin: false });
+    // The game's login is not an admin login: /admin reads only its own cookie, so this browser is simply not signed in there.
     const summary = await browser.call(env, "/api/admin/summary");
-    expect(summary.status).toBe(403);
-    expect(summary.body.error).toContain("wallet");
-    expect(summary.body.reason).toBe("nanoterra");
+    expect(summary.status).toBe(401);
+    expect((await browser.call(env, "/api/admin/check", { method: "POST", body: {} })).status).toBe(401);
+    // And if that very token were put in the admin cookie, a Nanoterra login is still refused (defence in depth).
+    browser.jar.set("admin", browser.jar.get("session")!);
+    const forced = await browser.call(env, "/api/admin/summary");
+    expect(forced.status).toBe(403);
+    expect(forced.body.error).toContain("wallet");
+    expect(forced.body.reason).toBe("nanoterra");
     expect((await browser.call(env, "/api/admin/check", { method: "POST", body: {} })).status).toBe(403);
     expect(ADMIN_SESSION_MS).toBeGreaterThan(0);
   });

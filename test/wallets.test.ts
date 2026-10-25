@@ -122,11 +122,12 @@ describe("Sign in with NanChat", () => {
 describe("the admin guard, with each wallet", () => {
   for (const way of WAYS) {
     it(`${way}: opens for the receive address, and refuses another address`, async () => {
-      const creator = await signedInWith(env, way, owner);
-      expect((await creator.call(env, "/api/me")).body).toMatchObject({ address: owner.address, admin: true });
+      const creator = await signedInWith(env, way, owner, "admin");
       expect((await creator.call(env, "/api/admin/summary")).status).toBe(200);
+      // The admin login is not the game's: this browser is still a guest in the game.
+      expect((await creator.call(env, "/api/me")).body).toMatchObject({ address: null, admin: false });
 
-      const someone = await signedInWith(env, way, player);
+      const someone = await signedInWith(env, way, player, "admin");
       const refused = await someone.call(env, "/api/admin/summary");
       expect(refused.status).toBe(403);
       expect(refused.body.signedInAs).toBe(player.address);

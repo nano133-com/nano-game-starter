@@ -3,15 +3,17 @@
 // payment: the wallet signs a text that names this game's domain, and the Worker checks the signature. The Worker
 // holds no key.
 //
-//   POST /api/signin/start          the browser starts a request: { way } (rate-limited; Turnstile when set)
+//   POST /api/signin/start          the browser starts a request: { way, scope } (rate-limited; Turnstile when set)
 //   GET  /api/signin/nano/:id       Berry Wallet reads the request (no cookie, no Origin)
 //   POST /api/signin/nano/:id       Berry Wallet posts its signature: 204 with no body when accepted
 //   POST /api/signin/nautilus?id=   Nautilus posts its signature: always 200 (Nautilus shows only a 200's words)
 //   POST /api/signin/nanchat        NanChat's relay server posts the signature: always 200 (NanChat shows the words)
-//   POST /api/signin/check          the browser asks every 2 seconds: { id, way }; only the browser that started it signs in
-//   POST /api/signout
+//   POST /api/signin/check          the browser asks every 2 seconds: { id, way, scope }; only the browser that started it signs in
+//   POST /api/signout               { scope }
 //
 // Whichever wallet signs, the session is for the address that signed, and only RECEIVE_ADDRESS opens /admin.
+// Two logins, two cookies: the game's (scope "play", cookie `session`) and /admin's (scope "admin", cookie `admin`), so the game and /admin
+// can have different people signed in at once. Only a wallet signature that was started from /admin makes an admin login.
 // DO NOT CHANGE the checks in this file or in the package: they are what makes the admin page the creator's.
 
 import {
@@ -43,6 +45,19 @@ import { d1Limit, LIMITS, memoryLimit } from "./ratelimit";
 
 export const SESSION_DAYS = 30;
 const STARTER_MAX_AGE = 30 * 60;
+/** An admin sign-in counts for one day; then the creator signs in again. */
+export const ADMIN_SESSION_MS = 24 * 60 * 60_000;
+
+/**
+ * Whose login it is: "play" (the game's, cookie `session`) or "admin" (/admin's, cookie `admin`). They are separate cookies with
+ * separate sessions, so the game and /admin can have different people signed in at once, and a login made for the game can never
+ * open /admin: the admin guard reads only the admin cookie.
+ */
+export type Scope = "play" | "admin";
+export const scopeOf = (v: unknown): Scope => (v === "admin" ? "admin" : "play");
+const SESSION_COOKIE: Record<Scope, string> = { play: "session", admin: "admin" };
+/** The cookie that ties a request to the browser that started it: one for each scope, so a request started for the game cannot be finished as an admin login. */
+const STARTER_COOKIE: Record<Scope, string> = { play: "starter", admin: "starter-admin" };
 
 /** The wallet apps a player can sign in with. The sign-in sheet shows them in this order. */
 export const WAYS = ["berry", "nanchat", "nautilus"] as const;
@@ -110,7 +125,7 @@ export function wallets(env: Env, req: Request, now?: () => number) {
   };
 }
 
-export async function startSignin(env: Env, req: Request, way: Way, now?: () => number): Promise<Response> {
+export async function startSignin(env: Env, req: Request, way: Way, now?: () => number, scope: Scope = "play"): Promise<Response> {
   const starter = randomHex(32);
   const hash = await sha256Hex(starter);
   const w = wallets(env, req, now);
@@ -125,7 +140,7 @@ export async function startSignin(env: Env, req: Request, way: Way, now?: () => 
     const s = await startNanoSignin(w.berry, { starter: hash, requestUrl: w.requestUrl });
     out = { way, id: s.id, link: s.link, walletLink: s.walletLink, expiresAt: s.expiresAt };
   }
-  return json(out, 200, { "Set-Cookie": setCookie(req, "starter", starter, STARTER_MAX_AGE) });
+  return json(out, 200, { "Set-Cookie": setCookie(req, STARTER_COOKIE[scope], starter, STARTER_MAX_AGE) });
 }
 
 /** A wallet app's JSON body (at most 8 KB), or null when it is not one readable object. */
@@ -207,9 +222,9 @@ export async function nanchatRoute(env: Env, req: Request, now = Date.now()): Pr
  * The browser's check. When its request is signed and this browser started it ("mine"), a NEW session is
  * made, once per request, and its cookie is set.
  */
-export async function checkSignin(db: D1Database, req: Request, id: unknown, way: Way, nowMs = Date.now()): Promise<Response> {
+export async function checkSignin(db: D1Database, req: Request, id: unknown, way: Way, nowMs = Date.now(), scope: Scope = "play"): Promise<Response> {
   if (typeof id !== "string") return fail(400, "no request id");
-  const cookie = readCookie(req, "starter");
+  const cookie = readCookie(req, STARTER_COOKIE[scope]);
   const starter = cookie ? await sha256Hex(cookie) : undefined;
   const o = { store: d1Requests(db, way), now: () => nowMs };
   const r = way === "nautilus" ? await checkNautilus(o, id, starter) : way === "nanchat" ? await checkNanchat(o, id, starter) : await checkNanoSignin(o, id, starter);
@@ -218,33 +233,34 @@ export async function checkSignin(db: D1Database, req: Request, id: unknown, way
   // Deliver once: a second check of the same request makes no second session.
   const once = await db.prepare("UPDATE signin_requests SET delivered = 1 WHERE id = ? AND way = ? AND delivered = 0 AND status = 'signedin'").bind(r.key ?? id, way).run();
   if (once.meta.changes !== 1) return json({ status: "used" });
-  const token = await createSession(db, r.account, nowMs);
-  return json({ status: "signedin", address: r.account }, 200, { "Set-Cookie": setCookie(req, "session", token, SESSION_DAYS * 86400) });
+  const lifeMs = scope === "admin" ? ADMIN_SESSION_MS : SESSION_DAYS * 86_400_000;
+  const token = await createSession(db, r.account, nowMs, "wallet", lifeMs);
+  return json({ status: "signedin", address: r.account }, 200, { "Set-Cookie": setCookie(req, SESSION_COOKIE[scope], token, lifeMs / 1000) });
 }
 
 /** `via`: how the player signed in. A wallet signature is "wallet"; a sign-in from Nanoterra is "nanoterra" and never opens /admin. */
 export type Via = "wallet" | "nanoterra";
 
-export async function createSession(db: D1Database, address: string, now = Date.now(), via: Via = "wallet"): Promise<string> {
+export async function createSession(db: D1Database, address: string, now = Date.now(), via: Via = "wallet", lifeMs = SESSION_DAYS * 86_400_000): Promise<string> {
   const token = randomHex(32);
   await db
     .prepare("INSERT INTO sessions (id_hash, address, created_at, expires_at, via) VALUES (?, ?, ?, ?, ?)")
-    .bind(await sha256Hex(token), address, now, now + SESSION_DAYS * 86_400_000, via)
+    .bind(await sha256Hex(token), address, now, now + lifeMs, via)
     .run();
   return token;
 }
 
 export type Session = { address: string; createdAt: number; via: Via };
 
-export async function sessionOf(db: D1Database, req: Request, now = Date.now()): Promise<Session | null> {
-  const token = readCookie(req, "session");
+export async function sessionOf(db: D1Database, req: Request, now = Date.now(), scope: Scope = "play"): Promise<Session | null> {
+  const token = readCookie(req, SESSION_COOKIE[scope]);
   if (!token || !/^[0-9a-f]{64}$/.test(token)) return null;
   const row = await db.prepare("SELECT address, created_at, via FROM sessions WHERE id_hash = ? AND expires_at > ?").bind(await sha256Hex(token), now).first<{ address: string; created_at: number; via: string }>();
   return row ? { address: row.address, createdAt: row.created_at, via: row.via === "nanoterra" ? "nanoterra" : "wallet" } : null;
 }
 
-export async function signOut(db: D1Database, req: Request): Promise<Response> {
-  const token = readCookie(req, "session");
+export async function signOut(db: D1Database, req: Request, scope: Scope = "play"): Promise<Response> {
+  const token = readCookie(req, SESSION_COOKIE[scope]);
   if (token) await db.prepare("DELETE FROM sessions WHERE id_hash = ?").bind(await sha256Hex(token)).run();
-  return json({ ok: true }, 200, { "Set-Cookie": setCookie(req, "session", "", 0) });
+  return json({ ok: true }, 200, { "Set-Cookie": setCookie(req, SESSION_COOKIE[scope], "", 0) });
 }

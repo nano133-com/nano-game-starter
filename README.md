@@ -24,7 +24,8 @@ straight to your own wallet. You change the game with your AI assistant.
    (step 4 adds the optional keys later).
 3. **Try it in test mode.** Open your game's address (`https://<name>.<you>.workers.dev`). Until your
    own address is set, every pay screen says **TEST MODE: DO NOT PAY**. Open `/admin` and sign in with
-   the wallet that holds your address: only your own address can open it.
+   the wallet that holds your address: only your own address can open it. The admin login is its own: you can be signed in to
+   the game as a player and to `/admin` as the creator at the same time (two cookies).
 4. **Turn on the protections.** In the Cloudflare dashboard (Workers & Pages, your game, Settings,
    Variables and Secrets), add a Nano node API key as the secret `NODE_API_KEY` (for
    example [Nanswap Nodes](https://nanswap.com/nano-node); read the provider's terms first, because some free

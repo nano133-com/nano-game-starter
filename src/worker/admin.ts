@@ -8,16 +8,17 @@ import { githubRepo, receiveAddress, setting, testMode, turnstileOn, type Env } 
 import { fail } from "./http";
 import { nodesFor } from "./nodes";
 import type { OrderRow } from "./orders";
-import { sessionOf } from "./signin";
+import { ADMIN_SESSION_MS, sessionOf } from "./signin";
 
-/** An admin sign-in counts for one day; then the creator signs in again. */
-export const ADMIN_SESSION_MS = 24 * 60 * 60_000;
+export { ADMIN_SESSION_MS };
 
 /** Null when the request may read the admin data, else the refusal to send. */
 export async function adminGuard(env: Env, req: Request, now = Date.now()): Promise<Response | null> {
   const owner = receiveAddress(env);
   if (!owner) return fail(403, "Set your own Nano address (RECEIVE_ADDRESS) first. Only that address can open this page.", { reason: "no_address" });
-  const session = await sessionOf(env.DB, req, now);
+  // Only the admin login (its own cookie, made by a wallet signature started from /admin) opens this page: a login made for the game, even
+  // the owner's own, does not.
+  const session = await sessionOf(env.DB, req, now, "admin");
   if (!session) return fail(401, "Sign in with your Nano address.");
   // A sign-in from Nanoterra names an address but proves no key: only a wallet signature opens the admin page.
   if (session.via !== "wallet") return fail(403, "Sign in with your Nano wallet to open this page.", { reason: "nanoterra" });

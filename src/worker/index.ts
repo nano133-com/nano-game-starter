@@ -12,7 +12,7 @@ import { callback as nanoterraCallback, cancel as nanoterraCancel, confirm as na
 import { Busy, MAX_OPEN_PER_PLAYER, orderById, orderView, reserve, type OrderRow } from "./orders";
 import { PRICE_FEEDS, usdPerXno } from "./price";
 import { d1Limit, LIMITS, memoryLimit, visitorKey } from "./ratelimit";
-import { checkSignin, nanchatRoute, nautilusRoute, sessionOf, signOut, startSignin, walletRoute, wayOf } from "./signin";
+import { checkSignin, nanchatRoute, nautilusRoute, scopeOf, sessionOf, signOut, startSignin, walletRoute, wayOf } from "./signin";
 import { sweep } from "./sweep";
 import { turnstileOk } from "./turnstile";
 import { warm } from "./warm";
@@ -130,15 +130,15 @@ export async function handleApi(req: Request, env: Env, now = Date.now()): Promi
     if (!way) return fail(400, "That wallet is not one of this game's.");
     if (!(await d1Limit(db, `signin|${await visitorKey(db, req)}`, LIMITS.signinStart.limit, LIMITS.signinStart.windowMs, now))) return fail(429, "Too many sign-ins. Wait a few minutes.");
     if (!(await turnstileOk(env, body.turnstile, req.headers.get("CF-Connecting-IP")))) return fail(403, "The person check failed. Try again.");
-    return startSignin(env, req, way, () => now);
+    return startSignin(env, req, way, () => now, scopeOf(body.scope));
   }
   if (method === "POST" && path === "/api/signin/check") {
     const body = await readJson(req);
     const way = wayOf(body.way);
     if (!way) return fail(400, "That wallet is not one of this game's.");
-    return checkSignin(db, req, body.id, way, now);
+    return checkSignin(db, req, body.id, way, now, scopeOf(body.scope));
   }
-  if (method === "POST" && path === "/api/signout") return signOut(db, req);
+  if (method === "POST" && path === "/api/signout") return signOut(db, req, scopeOf((await readJson(req)).scope));
 
   const session = await sessionOf(db, req, now);
 

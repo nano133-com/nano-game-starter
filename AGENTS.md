@@ -86,7 +86,9 @@ the risk first, then change it only with tests in `test/` that show the new rule
    `TEST_MODE` on, a pay screen shows **TEST MODE: DO NOT PAY**, no QR code, no address and no wallet
    link. A payment to an address nobody holds the key for is lost for good.
 5. **The admin guard** (`src/worker/admin.ts`): only the creator's own `RECEIVE_ADDRESS`, signed in
-   with Nano within the last day, can read `/api/admin/*`.
+   with Nano within the last day, can read `/api/admin/*`. **The admin login is its own cookie** (`admin`, made only by a wallet
+   signature that `/admin` started, `scope: "admin"`; the game's is `session`): the guard reads only the admin cookie, so a login made for
+   the game (a wallet, or Nanoterra) can never open `/admin`, and an admin login is not a player. Keep it that way.
 6. **Sign-in** (`src/worker/signin.ts`, the `@nano133/signin` package): players sign in with Berry
    Wallet, NanChat or Nautilus. The signed text names the game's domain; only the browser that started a
    sign-in gets the session; one session per sign-in. Whichever wallet signs, only `RECEIVE_ADDRESS` opens

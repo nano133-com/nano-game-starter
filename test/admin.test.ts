@@ -4,7 +4,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { EXAMPLE_ADDRESS, type Env } from "../src/worker/env";
 import { KEYED_NODE, PUBLIC_NODES } from "../src/worker/nodes";
-import { createSession } from "../src/worker/signin";
+import { ADMIN_SESSION_MS, createSession } from "../src/worker/signin";
 import { Browser, ORIGIN } from "./api";
 import { makeDb, testAccount } from "./helpers";
 
@@ -21,16 +21,23 @@ beforeEach(async () => {
 });
 
 const live = (): Env => ({ DB: db, RECEIVE_ADDRESS: owner.address, TEST_MODE: "off" });
+/** A player: the game's login (cookie `session`). */
 async function signedIn(address: string, ageMs = 0) {
   const b = new Browser();
   b.jar.set("session", await createSession(db, address, Date.now() - ageMs));
+  return b;
+}
+/** The admin login (cookie `admin`): a day long, made by a wallet signature started from /admin. */
+async function adminIn(address: string, ageMs = 0) {
+  const b = new Browser();
+  b.jar.set("admin", await createSession(db, address, Date.now() - ageMs, "wallet", ADMIN_SESSION_MS));
   return b;
 }
 
 describe("the admin guard", () => {
   it("refuses everyone while no real receive address is set", async () => {
     const env = { DB: db, RECEIVE_ADDRESS: EXAMPLE_ADDRESS, TEST_MODE: "off" };
-    const r = await (await signedIn(EXAMPLE_ADDRESS)).call(env, "/api/admin/summary");
+    const r = await (await adminIn(EXAMPLE_ADDRESS)).call(env, "/api/admin/summary");
     expect(r.status).toBe(403);
     expect(r.body.reason).toBe("no_address");
   });
@@ -40,21 +47,21 @@ describe("the admin guard", () => {
   });
 
   it("refuses a player signed in with another address", async () => {
-    const r = await (await signedIn(player.address)).call(live(), "/api/admin/summary");
+    const r = await (await adminIn(player.address)).call(live(), "/api/admin/summary");
     expect(r.status).toBe(403);
     expect(r.body.signedInAs).toBe(player.address);
     expect(r.body.reason).toBe("other_address");
   });
 
   it("opens for the receive address, signed in", async () => {
-    const r = await (await signedIn(owner.address)).call(live(), "/api/admin/summary");
+    const r = await (await adminIn(owner.address)).call(live(), "/api/admin/summary");
     expect(r.status).toBe(200);
     expect(r.body).toMatchObject({ address: owner.address, testMode: false, counts: { open: 0, paid: 0, expired: 0, paid_late: 0 } });
     expect(r.body.warnings.join(" ")).toMatch(/Turnstile is OFF/);
   });
 
   it('warns about each optional secret left as "none" or a space, and not once it is set', async () => {
-    const admin = await signedIn(owner.address);
+    const admin = await adminIn(owner.address);
     const skipped = await admin.call({ ...live(), NODE_API_KEY: "none", TURNSTILE_SECRET: " ", TURNSTILE_SITE_KEY: "NONE" }, "/api/admin/summary");
     expect(skipped.status).toBe(200);
     expect(skipped.body).toMatchObject({ turnstile: false, nodes: PUBLIC_NODES.map((n) => n.name) });
@@ -73,12 +80,12 @@ describe("the admin guard", () => {
   });
 
   it("asks the creator to sign in again after a day", async () => {
-    const r = await (await signedIn(owner.address, 25 * 60 * 60_000)).call(live(), "/api/admin/summary");
+    const r = await (await adminIn(owner.address, 25 * 60 * 60_000)).call(live(), "/api/admin/summary");
     expect(r.status).toBe(401);
   });
 
   it("refuses an admin call sent from another site", async () => {
-    const r = await (await signedIn(owner.address)).call(live(), "/api/admin/check", { body: {}, origin: "https://evil.test" });
+    const r = await (await adminIn(owner.address)).call(live(), "/api/admin/check", { body: {}, origin: "https://evil.test" });
     expect(r.status).toBe(403);
   });
 
@@ -96,13 +103,13 @@ describe("what the Shelf reads from the summary", () => {
   it("names the look of each order by id (the name can change; the id never does)", async () => {
     const buyer = await signedIn(player.address);
     expect((await buyer.call(live(), "/api/orders", { body: { lookId: "sunset" } })).status).toBe(201);
-    const r = await (await signedIn(owner.address)).call(live(), "/api/admin/summary");
+    const r = await (await adminIn(owner.address)).call(live(), "/api/admin/summary");
     expect(r.body.orders).toHaveLength(1);
     expect(r.body.orders[0]).toMatchObject({ lookId: "sunset", look: "Sunset" });
   });
 
   it("gives the game's repository only when it is shaped like owner/name", async () => {
-    const admin = await signedIn(owner.address);
+    const admin = await adminIn(owner.address);
     const repo = async (v: string | undefined) => (await admin.call({ ...live(), GITHUB_REPO: v }, "/api/admin/summary")).body.repo;
     expect(await repo("wes/gem-island-test")).toBe("wes/gem-island-test");
     expect(await repo(" wes/gem.island_test ")).toBe("wes/gem.island_test");
