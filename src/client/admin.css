@@ -3,8 +3,18 @@
 html:has(.admin-page),
 body.admin-page {
   height: auto;
-  overflow: auto;
   background: #f3f7fb;
+  /* The page, not the body, scrolls. A body that is a scroll container with overscroll-behavior: none (the game page's rule, style.css)
+     takes the wheel in Chrome and does not pass it on: the admin page did not scroll with a mouse. */
+  overscroll-behavior: auto;
+}
+
+html:has(.admin-page) {
+  overflow: auto;
+}
+
+body.admin-page {
+  overflow: visible;
 }
 
 .admin {
