@@ -129,6 +129,7 @@ describe("Sign in from Nanoterra", () => {
     const summary = await browser.call(env, "/api/admin/summary");
     expect(summary.status).toBe(403);
     expect(summary.body.error).toContain("wallet");
+    expect(summary.body.reason).toBe("nanoterra");
     expect((await browser.call(env, "/api/admin/check", { method: "POST", body: {} })).status).toBe(403);
     expect(ADMIN_SESSION_MS).toBeGreaterThan(0);
   });

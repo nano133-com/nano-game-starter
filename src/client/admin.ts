@@ -48,6 +48,18 @@ async function load() {
       );
       return;
     }
+    if (e.status === 403 && e.body.reason === "nanoterra") {
+      gate.replaceChildren(
+        h("h2", {}, "You signed in from Nanoterra"),
+        h("p", {}, "A Nanoterra sign-in names your address but proves no key, so it cannot open this page. Sign out, then sign in with the wallet that holds your game's address."),
+        signOutButton(),
+      );
+      return;
+    }
+    if (e.status === 403 && e.body.reason !== "no_address") {
+      gate.replaceChildren(h("h2", {}, "This page is closed to you"), h("p", {}, e.message), signOutButton());
+      return;
+    }
     if (e.status === 403) {
       gate.replaceChildren(h("h2", {}, "No receive address yet"), h("p", {}, e.message), h("p", { class: "fine" }, "Set RECEIVE_ADDRESS in your Cloudflare dashboard (Workers & Pages, your game, Settings, Variables), then deploy again."));
       return;

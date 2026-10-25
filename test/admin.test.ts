@@ -32,6 +32,7 @@ describe("the admin guard", () => {
     const env = { DB: db, RECEIVE_ADDRESS: EXAMPLE_ADDRESS, TEST_MODE: "off" };
     const r = await (await signedIn(EXAMPLE_ADDRESS)).call(env, "/api/admin/summary");
     expect(r.status).toBe(403);
+    expect(r.body.reason).toBe("no_address");
   });
 
   it("refuses a visitor who is not signed in", async () => {
@@ -42,6 +43,7 @@ describe("the admin guard", () => {
     const r = await (await signedIn(player.address)).call(live(), "/api/admin/summary");
     expect(r.status).toBe(403);
     expect(r.body.signedInAs).toBe(player.address);
+    expect(r.body.reason).toBe("other_address");
   });
 
   it("opens for the receive address, signed in", async () => {
