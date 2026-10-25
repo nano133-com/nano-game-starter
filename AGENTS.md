@@ -14,7 +14,7 @@ creator's address. The Worker holds **no key**: it only reads the Nano ledger to
 |---|---|
 | `game.config.json` | Name, one line, creator name, listing pictures, round length. Safe to change. |
 | `looks.json` | The looks: `id`, `name`, `priceUsd`, and `change` (`body` colour, optional `hat` and `hatColor`). Safe to change, with the rules below. |
-| `src/client/game/` | The game: `world.ts` (the level), `character.ts`, `gems.ts`, `controls.ts`, `game.ts` (rules, speed, camera). Safe to change. |
+| `src/client/game/` | The game: `world.ts` (the level), `character.ts` (what a character does, and the penguin), `nanoterraCharacter.ts` (the Nanoterra character), `hat.ts`, `gems.ts`, `controls.ts`, `game.ts` (rules, speed, camera). Safe to change. |
 | `src/client/ui/`, `src/client/style.css` | The sheets (looks, sign-in, pay) and the look of the page. Change with care (see "Never change"). |
 | `public/` | Static files: `art/wide.jpg`, `art/tall.jpg`, `favicon.svg`. |
 | `src/worker/` | The server. Money and sign-in live here. See "Never change". |
@@ -43,8 +43,11 @@ npm run check      # typecheck + tests + build: run it before every commit
   colours, the sky, the island's size (`ISLAND_RADIUS`).
 - **The rules:** speed, jump, gravity and camera in `game.ts`; the round's length and the number of
   gems in `game.config.json`; how gems score in `gems.ts`.
-- **The character:** shapes and hats in `character.ts`. A new hat needs its name in `HATS`
-  (`src/shared/looks.ts`) and a `case` in `Character.wear`.
+- **The character:** `game.config.json` `character` picks `"nanoterra"` (the default: `nanoterraCharacter.ts`, the package
+  `@nano133/character`, in the look the player has in Nanoterra) or `"own"` (the penguin in `character.ts`). Both do what `Avatar` in
+  `character.ts` says, so `game.ts` does not know which it has. The hats are in `hat.ts` and both wear them: a new hat needs its name in
+  `HATS` (`src/shared/looks.ts`) and a `case` in `buildHat`. A shop look that costs something paints the Nanoterra character's shirt; the free
+  look must never hide the look that a signed-in player brought.
 - **Looks:** add a look to `looks.json` with a new `id`. Keep one free look (`priceUsd: 0`).
 - Keep the first load small (no big model or sound files without a reason), and keep 60 frames a
   second on a mid-range phone: few objects, simple materials, no real-time shadows.

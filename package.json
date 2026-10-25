@@ -37,6 +37,7 @@
     }
   },
   "dependencies": {
+    "@nano133/character": "^0.1.0",
     "@nano133/signin": "^0.4.0",
     "qrcode-generator": "2.0.4",
     "three": "0.186.1"

@@ -64,9 +64,16 @@ To switch it on:
 What a player signed in from Nanoterra gets here: a session for the address Nanoterra named. It can show the player's name,
 own looks and order looks like any signed-in player. It **never opens `/admin`**: only a wallet signature does.
 
+**The character.** With `"character": "nanoterra"` in `game.config.json` (the default) the player is the Nanoterra island character
+(the package [`@nano133/character`](https://www.npmjs.com/package/@nano133/character)). A player who signed in from Nanoterra plays in the
+look they have there (skin, hair, shirt, trousers, shoes); anyone else has the island's first look. A look from your shop (`looks.json`)
+that costs something paints the shirt with its body colour, and any look that has a hat puts it on. The free look leaves the player's colours
+alone. Set `"character": "own"` for the little penguin of `character.ts` (or for a character of your own). The Nanoterra cosmetics that
+the player owns come with the sign-in (`nanoterraItems` in `/api/me`) but are not drawn: the package does not draw them yet.
+
 **Be honest about whose account it is.** Anyone can send a victim's browser to a callback link that holds the attacker's own
-code within its 60 seconds, and the victim then lands signed in as the attacker. So show the signed-in name on the first screen
-(this starter does, in the account button), and before any payment make clear whose account it is.
+code within its 60 seconds. This starter therefore asks first ("Sign in as <name>? Continue / Not me") and signs nobody in without that
+press. Keep the signed-in name on the first screen (the account button does), and before any payment make clear whose account it is.
 
 Use the details only to sign the player in to your game (Nanoterra's Terms). Your own records of them are yours to protect; Nanoterra
 cannot delete them for the player.

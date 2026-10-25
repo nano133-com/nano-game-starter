@@ -134,11 +134,17 @@ function renderAccount() {
   accountBtn.setAttribute("aria-label", me.address ? `Signed in as ${me.username ? `${me.username}, ${me.address}` : me.address}` : "Sign in with Nano");
 }
 
+/** The character in the look the player has in Nanoterra (a sign-in from there), and in the shop's look that they wear. */
+function dress() {
+  game.setNanoterra(me.via === "nanoterra" ? me.look ?? null : null);
+  game.wear(wornLook());
+}
+
 function showSignIn(then?: () => void) {
   const view = signInView(config, (signed) => {
     me = signed;
     renderAccount();
-    game.wear(wornLook());
+    dress();
     setTimeout(() => (then ? then() : sheet.close()), then ? 600 : 1200);
   });
   sheet.show("Sign in with Nano", view.node, view.stop);
@@ -151,7 +157,7 @@ function showAccount() {
     await post("/api/signout").catch(() => null);
     me = { address: null, owned: [], admin: false };
     renderAccount();
-    game.wear(wornLook());
+    dress();
     sheet.close();
   });
   sheet.show(
@@ -197,5 +203,5 @@ accountBtn.addEventListener("click", () => {
   }
   $("test-flag").hidden = !config.testMode;
   renderAccount();
-  game.wear(wornLook());
+  dress();
 })();

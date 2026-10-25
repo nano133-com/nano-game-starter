@@ -36,6 +36,8 @@ export function listing(env: Env, req: Request) {
     ages: CONFIG.ages,
     // How this game signs a Nanoterra player in ("exchange": /nanoterra/callback trades a one-time code for the player's details).
     signin: CONFIG.signin,
+    // The character the game plays in ("nanoterra": the Nanoterra island character; "own": the game's own). Nanoterra does not read it.
+    character: CONFIG.character,
   };
 }
 

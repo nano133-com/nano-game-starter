@@ -1,10 +1,11 @@
 // The game loop: a round of collecting gems against the clock. Change the rules here (speed, jump, the
-// round's length in game.config.json), the level in world.ts, the character in character.ts.
+// round's length in game.config.json), the level in world.ts, the character in character.ts (or nanoterraCharacter.ts).
 
 import * as THREE from "three";
 import { CONFIG } from "../../shared/config";
 import type { Look } from "../../shared/looks";
-import { Character } from "./character";
+import type { Look as NanoterraLook } from "@nano133/character";
+import { makeAvatar, type Avatar } from "./character";
 import { Controls } from "./controls";
 import { Gems } from "./gems";
 import { buildWorld, ISLAND_RADIUS, toonRamp, type Collider } from "./world";
@@ -37,7 +38,7 @@ export class Game {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
   readonly camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
-  readonly character: Character;
+  readonly character: Avatar;
   readonly controls: Controls;
   private readonly gems: Gems;
   private readonly colliders: Collider[];
@@ -77,7 +78,7 @@ export class Game {
     const world = buildWorld(this.scene, ramp);
     this.colliders = world.colliders;
     this.updateWorld = world.update;
-    this.character = new Character(ramp);
+    this.character = makeAvatar(ramp);
     this.scene.add(this.character.group, this.character.ground);
     this.gems = new Gems(this.scene, ramp, this.colliders, CONFIG.round.gems, CONFIG.round.goldEvery);
     this.controls = new Controls(view, hud.stick, hud.knob, hud.jump);
@@ -96,6 +97,11 @@ export class Game {
 
   wear(look: Look) {
     this.character.wear(look);
+  }
+
+  /** The look that the player has in Nanoterra (they signed in from there), or null. */
+  setNanoterra(look: NanoterraLook | null) {
+    this.character.setNanoterra(look);
   }
 
   start() {
@@ -155,10 +161,7 @@ export class Game {
     }
     this.character.group.position.copy(this.player);
     this.character.group.rotation.y = this.facing;
-    this.character.animate(dt, speed, this.player.y > 0.02);
-    const shadow = this.character.ground;
-    shadow.position.set(this.player.x, 0.02, this.player.z);
-    shadow.scale.setScalar(1 / (1 + this.player.y * 0.35));
+    this.character.animate(dt, { speed, airborne: this.player.y > 0.02, verticalSpeed: this.vy });
 
     if (playing) {
       const points = this.gems.update(dt, this.t, this.player);

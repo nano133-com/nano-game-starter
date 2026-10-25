@@ -1,14 +1,40 @@
-// The player's character: toon shapes, and a look (a body colour and a hat) from looks.json.
+// The player's character. Two are here, and game.config.json's "character" picks one:
+//   "nanoterra"  the Nanoterra island character (nanoterraCharacter.ts, the package @nano133/character): a player who signed in from
+//                Nanoterra plays in the look they have there, and a look of this game's shop paints the shirt and puts its hat on.
+//   "own"        the little penguin below: toon shapes, and a look (a body colour and a hat) from looks.json.
+// Both do what `Avatar` says, so the game (game.ts) does not know which one it has.
 
 import * as THREE from "three";
+import type { Look as NanoterraLook } from "@nano133/character";
+import { CONFIG } from "../../shared/config";
 import type { Look } from "../../shared/looks";
+import { buildHat, disposeHat } from "./hat";
+import { NanoterraCharacter } from "./nanoterraCharacter";
 import { toon } from "./world";
 
-export class Character {
+/** What the game needs of a character. */
+export interface Avatar {
+  /** Put it in the scene, move it with `position`, turn it with `rotation.y` (it faces +z). */
+  readonly group: THREE.Object3D;
+  /** The blob shadow: put it in the scene too. */
+  readonly ground: THREE.Object3D;
+  /** The look of this game's shop (looks.json) that the player wears. */
+  wear(look: Look): void;
+  /** The look that the player has in Nanoterra, or null for a player who did not come from there. */
+  setNanoterra(look: NanoterraLook | null): void;
+  /** One frame. `group.position` is already where the character stands. `speed` is metres a second over the ground. */
+  animate(dt: number, motion: { speed: number; airborne: boolean; verticalSpeed: number }): void;
+}
+
+/** The character that game.config.json asks for. */
+export const makeAvatar = (ramp: THREE.Texture): Avatar => (CONFIG.character === "own" ? new Character(ramp) : new NanoterraCharacter(ramp));
+
+export class Character implements Avatar {
   readonly group = new THREE.Group();
   private readonly body: THREE.Mesh;
   private readonly arms: THREE.Mesh[] = [];
   private readonly feet: THREE.Mesh[] = [];
+  /** Where a hat sits: the middle of the head. */
   private readonly hat = new THREE.Group();
   private readonly shadow: THREE.Mesh;
   private readonly bodyMat: THREE.MeshToonMaterial;
@@ -43,6 +69,7 @@ export class Character {
     const beak = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.16, 8), toon("#ff9f43", ramp));
     beak.position.set(0, 1.47, 0.43);
     beak.rotation.x = Math.PI / 2;
+    this.hat.position.y = 1.52;
     inner.add(this.body, belly, head, beak, this.hat, ...this.arms, ...this.feet);
     this.group.add(inner);
 
@@ -57,50 +84,18 @@ export class Character {
 
   wear(look: Look) {
     this.bodyMat.color.set(look.change.body);
-    for (const m of this.hat.children as THREE.Mesh[]) {
-      m.geometry.dispose();
-      (m.material as THREE.Material).dispose();
-    }
-    this.hat.clear();
-    const color = look.change.hatColor ?? "#333333";
-    const mat = toon(color, this.ramp);
-    const add = (geo: THREE.BufferGeometry, x: number, y: number, z: number, m: THREE.Material = mat) => {
-      const mesh = new THREE.Mesh(geo, m);
-      mesh.position.set(x, y, z);
-      this.hat.add(mesh);
-      return mesh;
-    };
-    switch (look.change.hat) {
-      case "cap": {
-        add(new THREE.SphereGeometry(0.45, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), 0, 1.66, 0).scale.set(1, 0.7, 1);
-        add(new THREE.CylinderGeometry(0.3, 0.3, 0.04, 18), 0, 1.68, 0.36).scale.set(1.15, 1, 0.9);
-        break;
-      }
-      case "beanie": {
-        add(new THREE.SphereGeometry(0.46, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), 0, 1.62, 0);
-        add(new THREE.TorusGeometry(0.42, 0.07, 8, 24), 0, 1.66, 0).rotation.x = Math.PI / 2;
-        add(new THREE.SphereGeometry(0.12, 12, 8), 0, 2.1, 0, toon("#ffffff", this.ramp));
-        break;
-      }
-      case "crown": {
-        add(new THREE.CylinderGeometry(0.31, 0.29, 0.22, 12), 0, 1.98, 0);
-        for (let i = 0; i < 5; i++) {
-          const a = (i / 5) * Math.PI * 2;
-          add(new THREE.ConeGeometry(0.07, 0.2, 6), Math.sin(a) * 0.27, 2.18, Math.cos(a) * 0.27);
-        }
-        break;
-      }
-      case "tophat": {
-        add(new THREE.CylinderGeometry(0.52, 0.52, 0.05, 24), 0, 1.86, 0);
-        add(new THREE.CylinderGeometry(0.3, 0.32, 0.56, 20), 0, 2.15, 0);
-        add(new THREE.CylinderGeometry(0.325, 0.325, 0.09, 20), 0, 1.94, 0, toon("#e0457b", this.ramp));
-        break;
-      }
-    }
+    for (const old of [...this.hat.children]) disposeHat(old);
+    const hat = buildHat(look, this.ramp);
+    if (hat) this.hat.add(hat);
   }
 
+  /** The penguin has no Nanoterra look. */
+  setNanoterra() {}
+
   /** A waddle while walking, and a stretch in the air. */
-  animate(dt: number, speed: number, airborne: boolean) {
+  animate(dt: number, { speed, airborne }: { speed: number; airborne: boolean; verticalSpeed: number }) {
+    this.shadow.position.set(this.group.position.x, 0.02, this.group.position.z);
+    this.shadow.scale.setScalar(1 / (1 + this.group.position.y * 0.35));
     this.step += dt * (4 + speed * 1.6);
     const swing = Math.min(1, speed / 6) * Math.sin(this.step * 2);
     this.feet[0]!.position.z = 0.06 + swing * 0.18;

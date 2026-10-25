@@ -1,4 +1,5 @@
 // Calls to the game's own Worker (/api). Cookies stay on this site; nothing goes to another server.
+import type { Look as NanoterraLook } from "@nano133/character";
 
 export class ApiError extends Error {
   constructor(
@@ -27,7 +28,7 @@ export const get = <T>(path: string) => call<T>(path);
 export const post = <T>(path: string, body: unknown = {}) => call<T>(path, { method: "POST", body: JSON.stringify(body) });
 
 export type Config = { name: string; creator: string; testMode: boolean; turnstileSiteKey: string | null };
-export type Me = { address: string | null; owned: string[]; admin: boolean; via?: "wallet" | "nanoterra"; username?: string };
+export type Me = { address: string | null; owned: string[]; admin: boolean; via?: "wallet" | "nanoterra"; username?: string; look?: NanoterraLook; nanoterraItems?: string[] };
 export type Order = {
   id: string;
   lookId: string;

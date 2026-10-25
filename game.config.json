@@ -7,5 +7,6 @@
   "regions": ["Global"],
   "ages": "18+",
   "signin": "exchange",
+  "character": "nanoterra",
   "round": { "seconds": 60, "gems": 10, "goldEvery": 8 }
 }
