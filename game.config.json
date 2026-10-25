@@ -6,5 +6,6 @@
   "multiplayer": false,
   "regions": ["Global"],
   "ages": "18+",
+  "signin": "exchange",
   "round": { "seconds": 60, "gems": 10, "goldEvery": 8 }
 }

@@ -19,6 +19,8 @@ export async function adminGuard(env: Env, req: Request, now = Date.now()): Prom
   if (!owner) return fail(403, "Set your own Nano address (RECEIVE_ADDRESS) first. Only that address can open this page.");
   const session = await sessionOf(env.DB, req, now);
   if (!session) return fail(401, "Sign in with your Nano address.");
+  // A sign-in from Nanoterra names an address but proves no key: only a wallet signature opens the admin page.
+  if (session.via !== "wallet") return fail(403, "Sign in with your Nano wallet to open this page.");
   if (session.address !== owner) return fail(403, "Only the game's own address can open this page.", { signedInAs: session.address });
   if (now - session.createdAt > ADMIN_SESSION_MS) return fail(401, "Sign in again: an admin sign-in counts for one day.");
   return null;

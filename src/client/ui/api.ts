@@ -27,7 +27,7 @@ export const get = <T>(path: string) => call<T>(path);
 export const post = <T>(path: string, body: unknown = {}) => call<T>(path, { method: "POST", body: JSON.stringify(body) });
 
 export type Config = { name: string; creator: string; testMode: boolean; turnstileSiteKey: string | null };
-export type Me = { address: string | null; owned: string[]; admin: boolean };
+export type Me = { address: string | null; owned: string[]; admin: boolean; via?: "wallet" | "nanoterra"; username?: string };
 export type Order = {
   id: string;
   lookId: string;

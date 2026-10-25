@@ -40,6 +40,34 @@ straight to your own wallet. You change the game with your AI assistant.
    program opens ([nano133.com/build/islands](https://nano133.com/build/islands)), Nano Island lists your
    game from that file; the sale stays with you.
 
+## Sign in from Nanoterra
+
+When your game is listed in Nanoterra, a player who is signed in at nano133.com can press Play and arrive here signed in. The
+player agrees once, on a card, to send their username, their Nano address and their character to your game. Nothing is sent
+otherwise, and a player can turn it off for your game at any time.
+
+How it works: the browser carries only a one-time code (60 seconds, used once) to `/nanoterra/callback`. Your Worker trades
+the code for the player's details with a call from the server, using your client id and your client secret, and makes its own
+session for that address. The secret never goes to a page.
+
+To switch it on:
+
+1. In Nanoterra's launch page (nano133.com/build/nanoterra/launch, step 6, after your game is sent), press **Make my secret**. It
+   shows the client id and the secret **once**. Save them now: Nanoterra keeps only a one-way code.
+2. Put the client id in `NANOTERRA_CLIENT_ID` (`wrangler.jsonc`, or the dashboard). Add the secret with
+   `npx wrangler secret put NANOTERRA_SECRET` (never in a file you commit).
+3. Keep `"signin": "exchange"` in `game.config.json`. Deploy. Nanoterra's check then tries your callback with a bad code and expects a clean refusal.
+
+What a player signed in from Nanoterra gets here: a session for the address Nanoterra named. It can show the player's name,
+own looks and order looks like any signed-in player. It **never opens `/admin`**: only a wallet signature does.
+
+**Be honest about whose account it is.** Anyone can send a victim's browser to a callback link that holds the attacker's own
+code within its 60 seconds, and the victim then lands signed in as the attacker. So show the signed-in name on the first screen
+(this starter does, in the account button), and before any payment make clear whose account it is.
+
+Use the details only to sign the player in to your game (Nanoterra's Terms). Your own records of them are yours to protect; Nanoterra
+cannot delete them for the player.
+
 ## What it costs
 
 Cloudflare serves the game's files free, with no traffic limit. You pay only for many server calls.

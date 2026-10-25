@@ -38,10 +38,13 @@
     "TEST_MODE": "off",
     // Optional: the public site key of a Cloudflare Turnstile widget (its secret is TURNSTILE_SECRET). `none` (or
     // empty) means not set.
-    "TURNSTILE_SITE_KEY": "none"
+    "TURNSTILE_SITE_KEY": "none",
+    // Optional: the client id that Nanoterra gives your game on its launch page (nano133.com/build/nanoterra/launch, step 6). With the
+    // secret NANOTERRA_SECRET it lets a player who is signed in at Nanoterra arrive here signed in. `none` means not set.
+    "NANOTERRA_CLIENT_ID": "none"
   },
   // Secrets are never written here. Add them with `npx wrangler secret put <NAME>` or in the
-  // dashboard: NODE_API_KEY (a free Nanswap Nodes key) and TURNSTILE_SECRET. See .dev.vars.example.
+  // dashboard: NODE_API_KEY (a free Nanswap Nodes key), TURNSTILE_SECRET and NANOTERRA_SECRET. See .dev.vars.example.
 
   // A spending limit per request. Cloudflare accepts it on the Workers Paid plan only; on the Free
   // plan the limit is fixed at 10 ms of CPU and 50 outside calls, so leave it off there.

@@ -12,3 +12,7 @@
 
 # Optional: the secret key of a Cloudflare Turnstile widget (its site key is TURNSTILE_SITE_KEY).
 # TURNSTILE_SECRET=
+
+# Optional: the client secret that Nanoterra shows once on its launch page (the client id goes in NANOTERRA_CLIENT_ID in
+# wrangler.jsonc). It lets a player who is signed in at Nanoterra arrive here signed in. Never put it in a page or a log.
+# NANOTERRA_SECRET=

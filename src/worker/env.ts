@@ -15,6 +15,12 @@ export interface Env {
   NODE_API_KEY?: string;
   /** Optional: public Nano node addresses, separated by commas, instead of the built-in list. */
   NANO_NODES?: string;
+  /** The client id that Nanoterra gave this game (the launch page, "Sign in from Nanoterra"). A setting, not a secret. */
+  NANOTERRA_CLIENT_ID?: string;
+  /** Secret: the client secret that Nanoterra showed once. Add it with `npx wrangler secret put NANOTERRA_SECRET`. */
+  NANOTERRA_SECRET?: string;
+  /** Tests only: where the exchange goes instead of https://nano133.com. */
+  NANOTERRA_ORIGIN?: string;
 }
 
 /** The address that belongs to nobody (its key is all zeros): the example in wrangler.jsonc. */
@@ -44,6 +50,11 @@ export function testMode(env: Env): boolean {
 export function setting(v?: string): string | undefined {
   const s = (v ?? "").trim();
   return s && !/^(none|skip|off|-)$/i.test(s) ? s : undefined;
+}
+
+/** Whether Nanoterra sign-in is set up: the client id and the secret are both set. */
+export function nanoterraOn(env: Env): boolean {
+  return Boolean(setting(env.NANOTERRA_CLIENT_ID) && setting(env.NANOTERRA_SECRET));
 }
 
 export function turnstileOn(env: Env): boolean {

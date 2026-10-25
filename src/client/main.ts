@@ -128,8 +128,10 @@ function showPay(order: Order, look: Look) {
 // ---- account ----
 
 function renderAccount() {
-  accountBtn.textContent = me.address ? shortAddress(me.address) : "Sign in";
-  accountBtn.setAttribute("aria-label", me.address ? `Signed in as ${me.address}` : "Sign in with Nano");
+  // A player who came from Nanoterra sees the name Nanoterra sent: whose account this is shows on the first screen.
+  const name = me.address ? me.username ?? shortAddress(me.address) : "Sign in";
+  accountBtn.textContent = name;
+  accountBtn.setAttribute("aria-label", me.address ? `Signed in as ${me.username ? `${me.username}, ${me.address}` : me.address}` : "Sign in with Nano");
 }
 
 function showSignIn(then?: () => void) {
@@ -157,7 +159,7 @@ function showAccount() {
     h(
       "div",
       {},
-      h("p", {}, "Signed in as"),
+      h("p", {}, me.username ? `Signed in as ${me.username}${me.via === "nanoterra" ? " (from Nanoterra)" : ""}` : "Signed in as"),
       h("p", { class: "address" }, me.address),
       me.admin ? h("p", {}, h("a", { class: "btn btn-wide", href: "/admin" }, "Open the admin page")) : null,
       out,

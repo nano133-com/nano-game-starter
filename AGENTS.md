@@ -19,6 +19,7 @@ creator's address. The Worker holds **no key**: it only reads the Nano ledger to
 | `public/` | Static files: `art/wide.jpg`, `art/tall.jpg`, `favicon.svg`. |
 | `src/worker/` | The server. Money and sign-in live here. See "Never change". |
 | `src/shared/` | Code for both sides: amounts (`amount.ts`), looks, config, security headers. |
+| `src/worker/nanoterra.ts` | Sign in from Nanoterra (`/nanoterra/callback`): trades a one-time code for the player's details, makes a session. See "Never change". |
 | `migrations/` | The database tables. Add a new numbered file; never edit an applied one. |
 | `test/` | Tests for money, records and sign-in. |
 
@@ -84,9 +85,14 @@ the risk first, then change it only with tests in `test/` that show the new rule
 7. **Security headers and CORS** (`src/shared/security.ts`, `src/worker/http.ts`): a strict Content
    Security Policy; calls that change something must come from the game's own pages. Do not loosen
    them to make a feature work: find another way.
-8. **Secrets** (`NODE_API_KEY`, `TURNSTILE_SECRET`): only in Cloudflare secrets or `.dev.vars`.
+8. **Secrets** (`NODE_API_KEY`, `TURNSTILE_SECRET`, `NANOTERRA_SECRET`): only in Cloudflare secrets or `.dev.vars`.
    Never in code, `wrangler.jsonc`, a commit, a log or a message. Never add a seed or a private key to
    this project: the game must stay watch-only.
+9. **Sign in from Nanoterra** (`src/worker/nanoterra.ts`, the `via` column of `sessions`): the one-time code is traded for the
+   player's details by a call from the Worker, with the client secret; the answer is read strictly; the session it makes
+   (`via: "nanoterra"`) NEVER opens `/admin` (only a wallet signature does). A page never holds the secret, and the code is never
+   logged. Whatever the game gives a player (a look, a score, a prize) must not depend on a Nanoterra sign-in alone if it would
+   be wrong to give it to whoever holds that name: show the signed-in name first, and make clear whose account it is before a payment.
 
 ## Good to know
 

@@ -10,6 +10,8 @@ export type GameConfig = {
   multiplayer: boolean;
   regions: string[];
   ages: string;
+  /** How the game signs a Nanoterra player in: "exchange" (the Worker trades a one-time code), "ticket" or "none". */
+  signin: "exchange" | "ticket" | "none";
   round: { seconds: number; gems: number; goldEvery: number };
 };
 
@@ -35,6 +37,7 @@ function check(c: any): GameConfig {
     multiplayer: c.multiplayer === true,
     regions: c.regions,
     ages: text(c.ages, "ages", 10),
+    signin: c.signin === "ticket" || c.signin === "none" ? c.signin : "exchange",
     round: { seconds: n(c.round?.seconds, "round.seconds", 10, 600), gems: n(c.round?.gems, "round.gems", 1, 40), goldEvery: n(c.round?.goldEvery, "round.goldEvery", 2, 100) },
   };
 }

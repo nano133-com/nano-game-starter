@@ -8,6 +8,7 @@ import { lookById } from "../shared/looks";
 import { adminGuard, adminSummary } from "./admin";
 import { receiveAddress, setting, testMode, turnstileOn, type Env } from "./env";
 import { fail, json, readJson, sameOrigin, secure, visitorIp } from "./http";
+import { callback as nanoterraCallback, playerOf } from "./nanoterra";
 import { Busy, MAX_OPEN_PER_PLAYER, orderById, orderView, reserve, type OrderRow } from "./orders";
 import { PRICE_FEEDS, usdPerXno } from "./price";
 import { d1Limit, LIMITS, memoryLimit, visitorKey } from "./ratelimit";
@@ -33,6 +34,8 @@ export function listing(env: Env, req: Request) {
     multiplayer: CONFIG.multiplayer,
     regions: CONFIG.regions,
     ages: CONFIG.ages,
+    // How this game signs a Nanoterra player in ("exchange": /nanoterra/callback trades a one-time code for the player's details).
+    signin: CONFIG.signin,
   };
 }
 
@@ -140,7 +143,9 @@ export async function handleApi(req: Request, env: Env, now = Date.now()): Promi
   if (method === "GET" && path === "/api/me") {
     if (!session) return json({ address: null, owned: [], admin: false });
     const owned = (await db.prepare("SELECT look_id FROM owned WHERE player = ?").bind(session.address).all<{ look_id: string }>()).results.map((r) => r.look_id);
-    return json({ address: session.address, owned, admin: session.address === receiveAddress(env) });
+    // The name and the character of a player who signed in from Nanoterra (the game's own screens may show them).
+    const nanoterra = session.via === "nanoterra" ? await playerOf(db, session.address) : null;
+    return json({ address: session.address, owned, admin: session.via === "wallet" && session.address === receiveAddress(env), via: session.via, ...(nanoterra ? { username: nanoterra.username, look: nanoterra.look, nanoterraItems: nanoterra.items } : {}) });
   }
 
   if (path === "/api/orders" && method === "POST") {
@@ -188,6 +193,7 @@ export default {
       if (path === "/nano-game.json" && (req.method === "GET" || req.method === "HEAD")) {
         return secure(json(listing(env, req), 200, { "Cache-Control": "public, max-age=300" }), false);
       }
+      if (path === "/nanoterra/callback") return secure(await nanoterraCallback(env, req, visitorIp(req)), false);
       if (path.startsWith("/api/")) return secure(await handleApi(req, env), true);
       return secure(new Response("Not found", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } }), false);
     } catch (e) {

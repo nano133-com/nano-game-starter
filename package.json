@@ -30,6 +30,9 @@
       },
       "TURNSTILE_SITE_KEY": {
         "description": "Optional. Leave `none` for now. Later, the public site key of a free [Cloudflare Turnstile](https://dash.cloudflare.com/?to=/:account/turnstile) widget for your game's address, with its secret `TURNSTILE_SECRET` (README, step 4)."
+      },
+      "NANOTERRA_CLIENT_ID": {
+        "description": "Optional. Leave `none` for now. Later, the client id that Nanoterra gives your game, with its secret `NANOTERRA_SECRET` (README, \"Sign in from Nanoterra\")."
       }
     }
   },

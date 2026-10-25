@@ -222,22 +222,25 @@ export async function checkSignin(db: D1Database, req: Request, id: unknown, way
   return json({ status: "signedin", address: r.account }, 200, { "Set-Cookie": setCookie(req, "session", token, SESSION_DAYS * 86400) });
 }
 
-export async function createSession(db: D1Database, address: string, now = Date.now()): Promise<string> {
+/** `via`: how the player signed in. A wallet signature is "wallet"; a sign-in from Nanoterra is "nanoterra" and never opens /admin. */
+export type Via = "wallet" | "nanoterra";
+
+export async function createSession(db: D1Database, address: string, now = Date.now(), via: Via = "wallet"): Promise<string> {
   const token = randomHex(32);
   await db
-    .prepare("INSERT INTO sessions (id_hash, address, created_at, expires_at) VALUES (?, ?, ?, ?)")
-    .bind(await sha256Hex(token), address, now, now + SESSION_DAYS * 86_400_000)
+    .prepare("INSERT INTO sessions (id_hash, address, created_at, expires_at, via) VALUES (?, ?, ?, ?, ?)")
+    .bind(await sha256Hex(token), address, now, now + SESSION_DAYS * 86_400_000, via)
     .run();
   return token;
 }
 
-export type Session = { address: string; createdAt: number };
+export type Session = { address: string; createdAt: number; via: Via };
 
 export async function sessionOf(db: D1Database, req: Request, now = Date.now()): Promise<Session | null> {
   const token = readCookie(req, "session");
   if (!token || !/^[0-9a-f]{64}$/.test(token)) return null;
-  const row = await db.prepare("SELECT address, created_at FROM sessions WHERE id_hash = ? AND expires_at > ?").bind(await sha256Hex(token), now).first<{ address: string; created_at: number }>();
-  return row ? { address: row.address, createdAt: row.created_at } : null;
+  const row = await db.prepare("SELECT address, created_at, via FROM sessions WHERE id_hash = ? AND expires_at > ?").bind(await sha256Hex(token), now).first<{ address: string; created_at: number; via: string }>();
+  return row ? { address: row.address, createdAt: row.created_at, via: row.via === "nanoterra" ? "nanoterra" : "wallet" } : null;
 }
 
 export async function signOut(db: D1Database, req: Request): Promise<Response> {
