@@ -59,6 +59,14 @@ const SESSION_COOKIE: Record<Scope, string> = { play: "session", admin: "admin" 
 /** The cookie that ties a request to the browser that started it: one for each scope, so a request started for the game cannot be finished as an admin login. */
 const STARTER_COOKIE: Record<Scope, string> = { play: "starter", admin: "starter-admin" };
 
+/**
+ * What the database keeps of a session or of a request's starter: the hash of the token. An admin token is hashed with a prefix, so the
+ * SERVER (not only the cookie's name) keeps the two scopes apart: a token made for the game does not open /admin even if it is put in
+ * the admin cookie, and a starter value copied from one scope's cookie to the other's does not finish a request. The game's keys are the
+ * plain hashes they always were.
+ */
+const keyOf = (value: string, scope: Scope): Promise<string> => sha256Hex(scope === "admin" ? `admin:${value}` : value);
+
 /** The wallet apps a player can sign in with. The sign-in sheet shows them in this order. */
 export const WAYS = ["berry", "nanchat", "nautilus"] as const;
 export type Way = (typeof WAYS)[number];
@@ -127,7 +135,7 @@ export function wallets(env: Env, req: Request, now?: () => number) {
 
 export async function startSignin(env: Env, req: Request, way: Way, now?: () => number, scope: Scope = "play"): Promise<Response> {
   const starter = randomHex(32);
-  const hash = await sha256Hex(starter);
+  const hash = await keyOf(starter, scope);
   const w = wallets(env, req, now);
   let out: Record<string, unknown>;
   if (way === "nautilus") {
@@ -222,30 +230,35 @@ export async function nanchatRoute(env: Env, req: Request, now = Date.now()): Pr
  * The browser's check. When its request is signed and this browser started it ("mine"), a NEW session is
  * made, once per request, and its cookie is set.
  */
-export async function checkSignin(db: D1Database, req: Request, id: unknown, way: Way, nowMs = Date.now(), scope: Scope = "play"): Promise<Response> {
+export async function checkSignin(db: D1Database, req: Request, id: unknown, way: Way, nowMs = Date.now(), scope: Scope = "play", owner: string | null = null): Promise<Response> {
   if (typeof id !== "string") return fail(400, "no request id");
   const cookie = readCookie(req, STARTER_COOKIE[scope]);
-  const starter = cookie ? await sha256Hex(cookie) : undefined;
+  const starter = cookie ? await keyOf(cookie, scope) : undefined;
   const o = { store: d1Requests(db, way), now: () => nowMs };
   const r = way === "nautilus" ? await checkNautilus(o, id, starter) : way === "nanchat" ? await checkNanchat(o, id, starter) : await checkNanoSignin(o, id, starter);
   if (r.status !== "signedin") return json({ status: r.status });
   if (!r.mine || !r.account) return json({ status: "elsewhere" });
+  // An admin login is for the game's own address only. A wallet that is not it makes no admin login (and does not end the owner's, which is
+  // in a cookie of its own), and the request stays unused. `owner` is RECEIVE_ADDRESS, or null when none is set.
+  if (scope === "admin" && r.account !== owner) return json({ status: "not_owner", address: r.account });
   // Deliver once: a second check of the same request makes no second session.
   const once = await db.prepare("UPDATE signin_requests SET delivered = 1 WHERE id = ? AND way = ? AND delivered = 0 AND status = 'signedin'").bind(r.key ?? id, way).run();
   if (once.meta.changes !== 1) return json({ status: "used" });
-  const lifeMs = scope === "admin" ? ADMIN_SESSION_MS : SESSION_DAYS * 86_400_000;
-  const token = await createSession(db, r.account, nowMs, "wallet", lifeMs);
-  return json({ status: "signedin", address: r.account }, 200, { "Set-Cookie": setCookie(req, SESSION_COOKIE[scope], token, lifeMs / 1000) });
+  const token = await createSession(db, r.account, nowMs, "wallet", scope);
+  return json({ status: "signedin", address: r.account }, 200, { "Set-Cookie": setCookie(req, SESSION_COOKIE[scope], token, lifeOf(scope) / 1000) });
 }
 
 /** `via`: how the player signed in. A wallet signature is "wallet"; a sign-in from Nanoterra is "nanoterra" and never opens /admin. */
 export type Via = "wallet" | "nanoterra";
 
-export async function createSession(db: D1Database, address: string, now = Date.now(), via: Via = "wallet", lifeMs = SESSION_DAYS * 86_400_000): Promise<string> {
+/** How long a login lasts: the game's 30 days, /admin's one day. */
+export const lifeOf = (scope: Scope): number => (scope === "admin" ? ADMIN_SESSION_MS : SESSION_DAYS * 86_400_000);
+
+export async function createSession(db: D1Database, address: string, now = Date.now(), via: Via = "wallet", scope: Scope = "play"): Promise<string> {
   const token = randomHex(32);
   await db
     .prepare("INSERT INTO sessions (id_hash, address, created_at, expires_at, via) VALUES (?, ?, ?, ?, ?)")
-    .bind(await sha256Hex(token), address, now, now + lifeMs, via)
+    .bind(await keyOf(token, scope), address, now, now + lifeOf(scope), via)
     .run();
   return token;
 }
@@ -255,12 +268,12 @@ export type Session = { address: string; createdAt: number; via: Via };
 export async function sessionOf(db: D1Database, req: Request, now = Date.now(), scope: Scope = "play"): Promise<Session | null> {
   const token = readCookie(req, SESSION_COOKIE[scope]);
   if (!token || !/^[0-9a-f]{64}$/.test(token)) return null;
-  const row = await db.prepare("SELECT address, created_at, via FROM sessions WHERE id_hash = ? AND expires_at > ?").bind(await sha256Hex(token), now).first<{ address: string; created_at: number; via: string }>();
+  const row = await db.prepare("SELECT address, created_at, via FROM sessions WHERE id_hash = ? AND expires_at > ?").bind(await keyOf(token, scope), now).first<{ address: string; created_at: number; via: string }>();
   return row ? { address: row.address, createdAt: row.created_at, via: row.via === "nanoterra" ? "nanoterra" : "wallet" } : null;
 }
 
 export async function signOut(db: D1Database, req: Request, scope: Scope = "play"): Promise<Response> {
   const token = readCookie(req, SESSION_COOKIE[scope]);
-  if (token) await db.prepare("DELETE FROM sessions WHERE id_hash = ?").bind(await sha256Hex(token)).run();
+  if (token) await db.prepare("DELETE FROM sessions WHERE id_hash = ?").bind(await keyOf(token, scope)).run();
   return json({ ok: true }, 200, { "Set-Cookie": setCookie(req, SESSION_COOKIE[scope], "", 0) });
 }

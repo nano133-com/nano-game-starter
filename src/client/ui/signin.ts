@@ -120,6 +120,7 @@ export function signInView(config: Config, onDone: (me: Me) => void, scope: "pla
         return;
       }
       if (r.status === "elsewhere" || r.status === "used") return again(s, "This sign-in was used in another browser. Start again.");
+      if (r.status === "not_owner") return again(s, "That wallet is not this game's address. Choose the wallet that holds it.");
     } catch (e) {
       if (e instanceof ApiError && e.status === 429) status.textContent = "Too many checks. Waiting a moment…";
     }

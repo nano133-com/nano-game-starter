@@ -5,7 +5,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { EXAMPLE_ADDRESS, type Env } from "../src/worker/env";
 import { WAYS } from "../src/worker/signin";
-import { Browser, ORIGIN, signedInWith, walletCall } from "./api";
+import { Browser, ORIGIN, signedInWith, walletAnswer, walletCall } from "./api";
 import { makeDb, nanauthOf, nanchatAnswer, nanoauthItem, nautilusAnswer, testAccount } from "./helpers";
 
 let env: Env;
@@ -127,10 +127,14 @@ describe("the admin guard, with each wallet", () => {
       // The admin login is not the game's: this browser is still a guest in the game.
       expect((await creator.call(env, "/api/me")).body).toMatchObject({ address: null, admin: false });
 
-      const someone = await signedInWith(env, way, player, "admin");
-      const refused = await someone.call(env, "/api/admin/summary");
-      expect(refused.status).toBe(403);
-      expect(refused.body.signedInAs).toBe(player.address);
+      // Another address signs, and no admin login is made for it.
+      const someone = new Browser();
+      const start = await someone.call(env, "/api/signin/start", { body: { way, scope: "admin" } });
+      await walletAnswer(env, way, start.body, player);
+      const done = await someone.call(env, "/api/signin/check", { body: { id: start.body.id, way, scope: "admin" } });
+      expect(done.body).toEqual({ status: "not_owner", address: player.address });
+      expect(someone.jar.has("admin")).toBe(false);
+      expect((await someone.call(env, "/api/admin/summary")).status).toBe(401);
     });
   }
 

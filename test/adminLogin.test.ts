@@ -3,8 +3,8 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Env } from "../src/worker/env";
-import { ADMIN_SESSION_MS, WAYS } from "../src/worker/signin";
-import { Browser, signedInWith, walletAnswer } from "./api";
+import { ADMIN_SESSION_MS, createSession, SESSION_DAYS, sessionOf, WAYS } from "../src/worker/signin";
+import { Browser, signedInWith, walletAnswer, walletFrom } from "./api";
 import { makeDb, testAccount } from "./helpers";
 
 let env: Env;
@@ -17,7 +17,10 @@ beforeAll(async () => {
   env = { DB: made.db, RECEIVE_ADDRESS: owner.address, TEST_MODE: "off" };
 });
 afterAll(() => close());
+let visitors = 0;
 beforeEach(async () => {
+  // A new wallet visitor for each test (the wallet route's limit is kept in memory for the whole file).
+  walletFrom.ip = `198.51.100.${10 + (++visitors % 200)}`;
   for (const t of ["hits", "sessions", "signin_requests"]) await env.DB.prepare(`DELETE FROM ${t}`).run();
 });
 
@@ -129,3 +132,108 @@ describe("the admin login", () => {
     expect((await new Browser().call(env, "/api/signout", { body: { scope: "admin" } })).status).toBe(200);
   });
 });
+
+describe("the server keeps the two logins apart, not only the cookies' names", () => {
+  it("a game token put in the admin cookie does not open /admin, and an admin token put in the game's cookie is not a player", async () => {
+    const asPlayer = await signedInWith(env, "berry", owner, "play");
+    asPlayer.jar.set("admin", asPlayer.jar.get("session")!);
+    expect((await asPlayer.call(env, "/api/admin/summary")).status).toBe(401);
+
+    const asAdmin = await signedInWith(env, "berry", owner, "admin");
+    asAdmin.jar.set("session", asAdmin.jar.get("admin")!);
+    expect((await asAdmin.call(env, "/api/me")).body).toMatchObject({ address: null });
+    expect((await asAdmin.call(env, "/api/orders", { body: { lookId: "sunset" } })).status).toBe(401);
+  });
+
+  it("a request's starter value copied from one scope's cookie to the other's does not finish it", async () => {
+    const browser = new Browser();
+    const start = await browser.call(env, "/api/signin/start", { body: { way: "berry", scope: "play" } });
+    await walletAnswer(env, "berry", start.body, owner);
+    browser.jar.set("starter-admin", browser.jar.get("starter")!);
+    const before = await sessionCount();
+    const done = await browser.call(env, "/api/signin/check", { body: { id: start.body.id, way: "berry", scope: "admin" } });
+    expect(done.body).toEqual({ status: "elsewhere" });
+    expect(browser.jar.has("admin")).toBe(false);
+    expect(await sessionCount()).toBe(before);
+  });
+
+  it("another wallet makes no admin login, leaves the owner's admin login alone, and the request stays unused", async () => {
+    const browser = await signedInWith(env, "berry", owner, "admin");
+    const token = browser.jar.get("admin");
+    const start = await browser.call(env, "/api/signin/start", { body: { way: "nanchat", scope: "admin" } });
+    await walletAnswer(env, "nanchat", start.body, player);
+    const before = await sessionCount();
+    const refused = await browser.call(env, "/api/signin/check", { body: { id: start.body.id, way: "nanchat", scope: "admin" } });
+    expect(refused.body).toEqual({ status: "not_owner", address: player.address });
+    expect(refused.res.headers.getSetCookie()).toEqual([]);
+    expect(browser.jar.get("admin")).toBe(token);
+    expect(await sessionCount()).toBe(before);
+    const used = await env.DB.prepare("SELECT delivered FROM signin_requests WHERE status = 'signedin' AND account = ?").bind(player.address).first<{ delivered: number }>();
+    expect(used?.delivered ?? 0).toBe(0);
+    expect((await browser.call(env, "/api/admin/summary")).status).toBe(200);
+  });
+
+  it("with no receive address, nobody makes an admin login", async () => {
+    const none: Env = { ...env, RECEIVE_ADDRESS: "none" };
+    const browser = new Browser();
+    const start = await browser.call(none, "/api/signin/start", { body: { way: "berry", scope: "admin" } });
+    await walletAnswer(none, "berry", start.body, owner);
+    const done = await browser.call(none, "/api/signin/check", { body: { id: start.body.id, way: "berry", scope: "admin" } });
+    expect(done.body).toEqual({ status: "not_owner", address: owner.address });
+    expect(browser.jar.has("admin")).toBe(false);
+  });
+
+  it("a sign-out whose body is not JSON signs out of the game, as it always did", async () => {
+    const browser = await signedInWith(env, "berry", player, "play");
+    const res = await handle(browser, "/api/signout", "scope=admin");
+    expect(res.status).toBe(200);
+    expect(res.headers.getSetCookie().join(";")).toMatch(/session=;|session=; /);
+  });
+});
+
+describe("on https the logins are `__Host-` cookies, one day and thirty days", () => {
+  const https = "https://game.test";
+  const field = (cookie: string, name: string) => cookie.split(";").map((p) => p.trim()).find((p) => p.toLowerCase().startsWith(`${name.toLowerCase()}=`));
+
+  it("start, sign-in and sign-out set the right names, lifetimes and attributes", async () => {
+    const browser = new Browser(https);
+    const start = await browser.call(env, "/api/signin/start", { body: { way: "berry", scope: "admin" } });
+    const [starter] = start.res.headers.getSetCookie();
+    expect(starter!.startsWith("__Host-starter-admin=")).toBe(true);
+    for (const attr of ["Path=/", "HttpOnly", "SameSite=Lax", "Secure", "Max-Age=1800"]) expect(starter, attr).toContain(attr);
+
+    // The wallet app is reached on the same host: it reads the request over https too.
+    const request = await (await import("../src/worker/index")).handleApi(new Request(`${https}/api/signin/nano/${start.body.id}`, { headers: { "CF-Connecting-IP": "198.51.100.9" } }), env, Date.now());
+    expect(request.status).toBe(200);
+
+    // A game login and an admin login, made directly: the https names and the lifetimes.
+    const game = await createSession(env.DB, player.address, Date.now(), "wallet", "play");
+    const admin = await createSession(env.DB, owner.address, Date.now(), "wallet", "admin");
+    const asReq = (cookie: string) => new Request(`${https}/x`, { headers: { Cookie: cookie } });
+    expect((await sessionOf(env.DB, asReq(`__Host-session=${game}`), Date.now(), "play"))?.address).toBe(player.address);
+    expect((await sessionOf(env.DB, asReq(`__Host-admin=${admin}`), Date.now(), "admin"))?.address).toBe(owner.address);
+    // The plain names are not read on https (a sibling subdomain can set them; it cannot set a `__Host-` one).
+    expect(await sessionOf(env.DB, asReq(`session=${game}`), Date.now(), "play")).toBeNull();
+    expect(await sessionOf(env.DB, asReq(`admin=${admin}`), Date.now(), "admin")).toBeNull();
+    // And each token is good only in its own scope.
+    expect(await sessionOf(env.DB, asReq(`__Host-admin=${game}`), Date.now(), "admin")).toBeNull();
+    expect(await sessionOf(env.DB, asReq(`__Host-session=${admin}`), Date.now(), "play")).toBeNull();
+
+    const rows = await env.DB.prepare("SELECT address, expires_at - created_at AS life FROM sessions WHERE address IN (?, ?)").bind(player.address, owner.address).all<{ address: string; life: number }>();
+    const life = Object.fromEntries(rows.results.map((r) => [r.address, r.life]));
+    expect(life[player.address]).toBe(SESSION_DAYS * 86_400_000);
+    expect(life[owner.address]).toBe(ADMIN_SESSION_MS);
+
+    const out = await browser.call(env, "/api/signout", { body: { scope: "admin" } });
+    const [cleared] = out.res.headers.getSetCookie();
+    expect(cleared!.startsWith("__Host-admin=")).toBe(true);
+    expect(field(cleared!, "Max-Age")).toBe("Max-Age=0");
+  });
+});
+
+/** A POST with a body that is not JSON, from the game's own page. */
+async function handle(browser: Browser, path: string, raw: string): Promise<Response> {
+  const { handleApi } = await import("../src/worker/index");
+  const cookie = [...browser.jar].map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("; ");
+  return handleApi(new Request(`${browser.base}${path}`, { method: "POST", headers: { "Content-Type": "text/plain", Origin: browser.base, Cookie: cookie, "CF-Connecting-IP": "203.0.113.7" }, body: raw }), env, Date.now());
+}

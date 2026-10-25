@@ -132,13 +132,10 @@ describe("Sign in from Nanoterra", () => {
     const summary = await browser.call(env, "/api/admin/summary");
     expect(summary.status).toBe(401);
     expect((await browser.call(env, "/api/admin/check", { method: "POST", body: {} })).status).toBe(401);
-    // And if that very token were put in the admin cookie, a Nanoterra login is still refused (defence in depth).
+    // Nor does that very token when it is put in the admin cookie: the server keeps the two scopes apart, not only the cookie's name.
     browser.jar.set("admin", browser.jar.get("session")!);
-    const forced = await browser.call(env, "/api/admin/summary");
-    expect(forced.status).toBe(403);
-    expect(forced.body.error).toContain("wallet");
-    expect(forced.body.reason).toBe("nanoterra");
-    expect((await browser.call(env, "/api/admin/check", { method: "POST", body: {} })).status).toBe(403);
+    expect((await browser.call(env, "/api/admin/summary")).status).toBe(401);
+    expect((await browser.call(env, "/api/admin/check", { method: "POST", body: {} })).status).toBe(401);
     expect(ADMIN_SESSION_MS).toBeGreaterThan(0);
   });
 

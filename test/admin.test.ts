@@ -4,7 +4,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { EXAMPLE_ADDRESS, type Env } from "../src/worker/env";
 import { KEYED_NODE, PUBLIC_NODES } from "../src/worker/nodes";
-import { ADMIN_SESSION_MS, createSession } from "../src/worker/signin";
+import { createSession } from "../src/worker/signin";
 import { Browser, ORIGIN } from "./api";
 import { makeDb, testAccount } from "./helpers";
 
@@ -30,7 +30,7 @@ async function signedIn(address: string, ageMs = 0) {
 /** The admin login (cookie `admin`): a day long, made by a wallet signature started from /admin. */
 async function adminIn(address: string, ageMs = 0) {
   const b = new Browser();
-  b.jar.set("admin", await createSession(db, address, Date.now() - ageMs, "wallet", ADMIN_SESSION_MS));
+  b.jar.set("admin", await createSession(db, address, Date.now() - ageMs, "wallet", "admin"));
   return b;
 }
 

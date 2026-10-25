@@ -136,9 +136,10 @@ export async function handleApi(req: Request, env: Env, now = Date.now()): Promi
     const body = await readJson(req);
     const way = wayOf(body.way);
     if (!way) return fail(400, "That wallet is not one of this game's.");
-    return checkSignin(db, req, body.id, way, now, scopeOf(body.scope));
+    return checkSignin(db, req, body.id, way, now, scopeOf(body.scope), receiveAddress(env));
   }
-  if (method === "POST" && path === "/api/signout") return signOut(db, req, scopeOf((await readJson(req)).scope));
+  // A body that is not JSON (an older page) signs out of the game, as before.
+  if (method === "POST" && path === "/api/signout") return signOut(db, req, scopeOf((await readJson(req).catch((): Record<string, unknown> => ({}))).scope));
 
   const session = await sessionOf(db, req, now);
 
