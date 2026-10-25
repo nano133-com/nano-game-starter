@@ -1,0 +1,9 @@
+/* The plain pages of Sign in from Nanoterra (the confirm screen and the error pages): big buttons for a phone first. */
+:root { color-scheme: light dark; font: 18px/1.5 system-ui, sans-serif; }
+body { max-width: 28rem; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+h1 { font-size: 1.6rem; line-height: 1.2; overflow-wrap: anywhere; }
+code, strong { overflow-wrap: anywhere; }
+form { margin: 0.75rem 0; }
+button { display: block; width: 100%; min-height: 3rem; padding: 0.5rem 1rem; border: 2px solid currentColor; border-radius: 0.75rem; background: transparent; color: inherit; font: inherit; font-weight: 600; cursor: pointer; }
+button.primary { border-color: #1558b0; background: #1d6fe0; color: #fff; }
+a { color: inherit; }

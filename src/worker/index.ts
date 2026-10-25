@@ -8,7 +8,7 @@ import { lookById } from "../shared/looks";
 import { adminGuard, adminSummary } from "./admin";
 import { receiveAddress, setting, testMode, turnstileOn, type Env } from "./env";
 import { fail, json, readJson, sameOrigin, secure, visitorIp } from "./http";
-import { callback as nanoterraCallback, playerOf } from "./nanoterra";
+import { callback as nanoterraCallback, cancel as nanoterraCancel, confirm as nanoterraConfirm, playerOf } from "./nanoterra";
 import { Busy, MAX_OPEN_PER_PLAYER, orderById, orderView, reserve, type OrderRow } from "./orders";
 import { PRICE_FEEDS, usdPerXno } from "./price";
 import { d1Limit, LIMITS, memoryLimit, visitorKey } from "./ratelimit";
@@ -194,6 +194,8 @@ export default {
         return secure(json(listing(env, req), 200, { "Cache-Control": "public, max-age=300" }), false);
       }
       if (path === "/nanoterra/callback") return secure(await nanoterraCallback(env, req, visitorIp(req)), false);
+      if (path === "/nanoterra/confirm") return secure(await nanoterraConfirm(env, req, visitorIp(req)), false);
+      if (path === "/nanoterra/cancel") return secure(nanoterraCancel(req), false);
       if (path.startsWith("/api/")) return secure(await handleApi(req, env), true);
       return secure(new Response("Not found", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } }), false);
     } catch (e) {
