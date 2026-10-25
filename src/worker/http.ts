@@ -26,10 +26,19 @@ export function sameOrigin(req: Request): boolean {
   return req.headers.get("Sec-Fetch-Site") === "same-origin";
 }
 
+/** Only a space or a tab around a name or a value is dropped: JS `trim()` also drops U+00A0, U+3000 and other Unicode spaces, which would let a name that a browser sees as another name (" __Host-session") pass for the real one. */
+const trimAscii = (s: string) => s.replace(/^[ \t]+|[ \t]+$/g, "");
+
 export function cookie(req: Request, name: string): string | null {
   for (const part of (req.headers.get("Cookie") ?? "").split(";")) {
     const i = part.indexOf("=");
-    if (i > 0 && part.slice(0, i).trim() === name) return decodeURIComponent(part.slice(i + 1).trim());
+    if (i > 0 && trimAscii(part.slice(0, i)) === name) {
+      try {
+        return decodeURIComponent(trimAscii(part.slice(i + 1)));
+      } catch {
+        // A value that is not valid percent-coding is not ours: look at the next cookie.
+      }
+    }
   }
   return null;
 }

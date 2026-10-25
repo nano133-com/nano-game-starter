@@ -91,8 +91,11 @@ the risk first, then change it only with tests in `test/` that show the new rule
 9. **Sign in from Nanoterra** (`src/worker/nanoterra.ts`, the `via` column of `sessions`): the one-time code is traded for the
    player's details by a call from the Worker, with the client secret; the answer is read strictly. The callback makes NO session:
    it shows "Sign in as <name>? Continue / Not me" and sets a signed pending cookie (5 minutes, SameSite=Lax). Only
-   `POST /nanoterra/confirm` makes the session, and only with that cookie and an Origin of this game (this stops a link that holds
-   someone else's code from signing a victim in as that person). The name on the screen is escaped. The session it makes
+   `POST /nanoterra/confirm` makes the session, and only with that cookie, an Origin of this game and the `bind` field of the screen
+   (a hash of the cookie's token: a second callback in the same browser cannot ride a press on the old screen); a pending cookie works
+   once (`hits`, by its id), also against "Not me" (this stops a link that holds someone else's code from signing a victim in as that
+   person). The cookie reader compares a name exactly (`trimAscii` in `http.ts`): never go back to `trim()`, which lets a sibling subdomain
+   toss a cookie that passes for a `__Host-` one. The name on the screen is escaped. The session it makes
    (`via: "nanoterra"`) NEVER opens `/admin` (only a wallet signature does). A page never holds the secret, and the code is never
    logged. Whatever the game gives a player (a look, a score, a prize) must not depend on a Nanoterra sign-in alone if it would
    be wrong to give it to whoever holds that name: show the signed-in name first, and make clear whose account it is before a payment.

@@ -50,7 +50,8 @@ How it works: the browser carries only a one-time code (60 seconds, used once) t
 the code for the player's details with a call from the server, using your client id and your client secret. It then shows a
 screen: **Sign in as <name>? Continue / Not me**. Only a press of **Continue** makes your game's own session for that address.
 The screen is there because anyone can send a link that holds their own code: without it, a player who opened that link would be
-signed in as the sender. The secret never goes to a page.
+signed in as the sender. The secret never goes to a page. (The one-time code is in the address of that first request, so your
+Worker's request log may hold it. It is already used by then: it works once.)
 
 To switch it on:
 

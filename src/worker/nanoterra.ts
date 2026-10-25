@@ -7,7 +7,9 @@
 // code, and a victim who opens it would land signed in as the attacker (login CSRF). So the callback only shows a screen:
 // "Sign in as <name>? Continue / Not me". A session is made only when the player presses Continue (POST /nanoterra/confirm),
 // and that press must carry the cookie the callback set in THIS browser (signed, 5 minutes, SameSite=Lax: another site's
-// form cannot send it) from the same origin. "Not me" (POST /nanoterra/cancel) drops the cookie.
+// form cannot send it) from the same origin, and the `bind` field of THIS screen (so a second callback that replaced the cookie
+// after the screen was drawn is not signed in by the press on the old screen). A pending cookie works once. "Not me"
+// (POST /nanoterra/cancel) drops the cookie and uses the token up.
 //
 // What this proves: Nanoterra says this player is signed in there and agreed to this game. It proves no key and no payment, so
 // a session made here (`via: "nanoterra"`) never opens /admin (admin.ts). The secret stays in the Worker: never put it in a
@@ -15,8 +17,8 @@
 
 import { validAddress } from "@nano133/signin/verify";
 import { nanoterraOn, setting, type Env } from "./env";
-import { json, readCookie, sameOrigin, setCookie } from "./http";
-import { memoryLimit } from "./ratelimit";
+import { json, randomHex, readCookie, sameOrigin, setCookie, sha256Hex, tooLarge } from "./http";
+import { d1Limit, LIMITS, memoryLimit } from "./ratelimit";
 import { createSession, SESSION_DAYS } from "./signin";
 
 const NANOTERRA = "https://nano133.com";
@@ -29,6 +31,8 @@ const CALLBACK_LIMIT = { limit: 20, windowMs: 60_000 };
 /** The cookie that waits for the player's Continue, and how long it lives (the player has 5 minutes to press it). */
 const PENDING_COOKIE = "nanoterra-pending";
 const PENDING_SECONDS = 300;
+/** A pending cookie is used once: its id is counted in D1 (`hits`, cleared by the sweep in this window's unit) in the window of its own deadline. */
+const ONCE_WINDOW_MS = LIMITS.order.windowMs;
 /** Put in front of what is signed, so a signature made here is good for nothing else. */
 const PENDING_LABEL = "nano-game-starter: a Nanoterra sign-in waits for Continue, v1";
 const text = new TextEncoder();
@@ -90,37 +94,46 @@ const b64url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replac
 const unb64url = (v: string) => Uint8Array.from(atob(v.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
 const pendingKey = (env: Env, usage: ("sign" | "verify")[]) => crypto.subtle.importKey("raw", text.encode(setting(env.NANOTERRA_SECRET) ?? ""), { name: "HMAC", hash: "SHA-256" }, false, usage);
 
-/** The cookie value that waits for Continue: the address that Nanoterra named and a deadline, signed with a key made from the secret. */
+/** The cookie value that waits for Continue: the address that Nanoterra named, a deadline and an id, signed with a key made from the secret. */
 export async function pendingToken(env: Env, address: string, now: number): Promise<string> {
-  const payload = b64url(text.encode(JSON.stringify({ a: address, exp: now + PENDING_SECONDS * 1000 })));
+  const payload = b64url(text.encode(JSON.stringify({ a: address, exp: now + PENDING_SECONDS * 1000, j: randomHex(12) })));
   const sig = new Uint8Array(await crypto.subtle.sign("HMAC", await pendingKey(env, ["sign"]), text.encode(`${PENDING_LABEL}\n${payload}`)));
   return `${payload}.${b64url(sig)}`;
 }
 
-/** The address in this browser's pending cookie, if the cookie is signed with this game's secret and has not run out; null for anything else. */
-export async function pendingAddress(env: Env, req: Request, now: number): Promise<string | null> {
+/** The field of the confirm screen that ties a press to the cookie the screen was made with. It is a hash: the token itself never goes into the page. */
+export const bindOf = async (token: string): Promise<string> => (await sha256Hex(token)).slice(0, 32);
+
+export type Pending = { address: string; id: string; exp: number; token: string };
+
+/** This browser's pending cookie, if it is signed with this game's secret and has not run out; null for anything else. */
+export async function readPending(env: Env, req: Request, now: number): Promise<Pending | null> {
   const token = readCookie(req, PENDING_COOKIE);
   if (!token || token.length > 512) return null;
   const [payload, sig, more] = token.split(".");
   if (!payload || !sig || more !== undefined) return null;
   try {
     if (!(await crypto.subtle.verify("HMAC", await pendingKey(env, ["verify"]), unb64url(sig), text.encode(`${PENDING_LABEL}\n${payload}`)))) return null;
-    const v = JSON.parse(new TextDecoder().decode(unb64url(payload))) as { a?: unknown; exp?: unknown };
-    if (typeof v.a !== "string" || !validAddress(v.a) || typeof v.exp !== "number" || v.exp < now) return null;
-    return v.a;
+    const v = JSON.parse(new TextDecoder().decode(unb64url(payload))) as { a?: unknown; exp?: unknown; j?: unknown };
+    if (typeof v.a !== "string" || !validAddress(v.a) || typeof v.exp !== "number" || v.exp < now || typeof v.j !== "string" || !/^[0-9a-f]{24}$/.test(v.j)) return null;
+    return { address: v.a, id: v.j, exp: v.exp, token };
   } catch {
     return null;
   }
 }
+
+/** True for the first use of a pending cookie, false for every other (the counter is the one place that keeps it). */
+const useOnce = (env: Env, p: Pending) => d1Limit(env.DB, `nanoterra-pending|${p.id}`, 1, ONCE_WINDOW_MS, p.exp);
 
 const escapeHtml = (v: string) => v.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 /** An address as the player can compare it: the start and the end. */
 const shortAddress = (a: string) => `${a.slice(0, 11)}\u2026${a.slice(-6)}`;
 
 /** The screen between the callback and the session. The name comes from another site: it is escaped. */
-function confirmPage(req: Request, player: Player, token: string): Response {
+async function confirmPage(req: Request, player: Player, token: string): Promise<Response> {
   const name = escapeHtml(player.username);
-  const html = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><link rel="stylesheet" href="/nanoterra.css"><title>Sign in as ${name}?</title><h1>Sign in as ${name}?</h1><p>Nanoterra says you are <strong>${name}</strong>, with the address <code>${shortAddress(player.address)}</code>.</p><p>Press <strong>Continue</strong> only if you just pressed Play in Nanoterra yourself. If someone sent you this link, press <strong>Not me</strong>.</p><form method="post" action="/nanoterra/confirm"><button type="submit" class="primary">Continue as ${name}</button></form><form method="post" action="/nanoterra/cancel"><button type="submit">Not me</button></form>`;
+  const bind = await bindOf(token);
+  const html = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><link rel="stylesheet" href="/nanoterra.css"><title>Sign in as ${name}?</title><h1>Sign in as ${name}?</h1><p>Nanoterra says you are <strong>${name}</strong>, with the address <code>${shortAddress(player.address)}</code>.</p><p>Press <strong>Continue</strong> only if you just pressed Play in Nanoterra yourself. If someone sent you this link, press <strong>Not me</strong>.</p><form method="post" action="/nanoterra/confirm"><input type="hidden" name="bind" value="${bind}"><button type="submit" class="primary">Continue as ${name}</button></form><form method="post" action="/nanoterra/cancel"><button type="submit">Not me</button></form>`;
   // "same-origin", not "no-referrer": with no-referrer a browser sends `Origin: null` on the form's POST, and confirm() would refuse
   // the player's own press. Another site still gets no Referer from this page, and its own POST here still carries its own Origin.
   const headers = new Headers({ "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Referrer-Policy": "same-origin" });
@@ -159,18 +172,29 @@ export async function confirm(env: Env, req: Request, ip: string, now = Date.now
   if (!nanoterraOn(env)) return page(503, "Nanoterra sign-in is not set up", "This game has not finished setting up sign-in from Nanoterra yet.");
   if (!sameOrigin(req)) return page(403, "That sign-in did not work", "The request did not come from this game's own page. Press Play in Nanoterra again.");
   if (!memoryLimit(`nanoterra-confirm|${ip}`, CALLBACK_LIMIT.limit, CALLBACK_LIMIT.windowMs, now)) return page(429, "Too many tries", "Wait a minute, then press Play in Nanoterra again.");
-  const address = await pendingAddress(env, req, now);
-  if (!address) return page(400, "That sign-in has run out", "It is more than 5 minutes since you pressed Play, or it did not start in this browser. Press Play in Nanoterra again.");
-  const token = await createSession(env.DB, address, now, "nanoterra");
+  const pending = await readPending(env, req, now);
+  if (!pending) return page(400, "That sign-in has run out", "It is more than 5 minutes since you pressed Play, or it did not start in this browser. Press Play in Nanoterra again.");
+  // The press must be from the screen that this cookie made: a second callback in this browser has replaced the cookie since the screen was drawn.
+  let bind = "";
+  try {
+    if (!tooLarge(req, 1024)) bind = String((await req.formData()).get("bind") ?? "");
+  } catch {
+    // No form: no bind.
+  }
+  if (bind !== (await bindOf(pending.token))) return page(400, "That sign-in changed", "Another sign-in started in this browser after this screen was shown. Press Play in Nanoterra again.");
+  if (!(await useOnce(env, pending))) return page(400, "That sign-in was used", "This sign-in was used or cancelled already. Press Play in Nanoterra again.");
+  const token = await createSession(env.DB, pending.address, now, "nanoterra");
   const headers = new Headers({ Location: "/", "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" });
   headers.append("Set-Cookie", setCookie(req, "session", token, SESSION_DAYS * 86400));
   headers.append("Set-Cookie", setCookie(req, PENDING_COOKIE, "", 0));
   return new Response(null, { status: 303, headers });
 }
 
-/** POST /nanoterra/cancel: the player pressed "Not me". Drops the pending cookie, makes no session, and goes to the game as a guest. */
-export function cancel(req: Request): Response {
+/** POST /nanoterra/cancel: the player pressed "Not me". Uses the pending token up, drops the cookie, makes no session, and goes to the game as a guest. */
+export async function cancel(env: Env, req: Request, now = Date.now()): Promise<Response> {
   if (req.method !== "POST") return json({ error: "Not allowed." }, 405, { Allow: "POST" });
+  const pending = await readPending(env, req, now);
+  if (pending) await useOnce(env, pending);
   const headers = new Headers({ Location: "/", "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" });
   headers.append("Set-Cookie", setCookie(req, PENDING_COOKIE, "", 0));
   return new Response(null, { status: 303, headers });

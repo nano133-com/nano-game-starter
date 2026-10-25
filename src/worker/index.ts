@@ -195,7 +195,7 @@ export default {
       }
       if (path === "/nanoterra/callback") return secure(await nanoterraCallback(env, req, visitorIp(req)), false);
       if (path === "/nanoterra/confirm") return secure(await nanoterraConfirm(env, req, visitorIp(req)), false);
-      if (path === "/nanoterra/cancel") return secure(nanoterraCancel(req), false);
+      if (path === "/nanoterra/cancel") return secure(await nanoterraCancel(env, req), false);
       if (path.startsWith("/api/")) return secure(await handleApi(req, env), true);
       return secure(new Response("Not found", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } }), false);
     } catch (e) {

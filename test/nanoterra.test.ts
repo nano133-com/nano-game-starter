@@ -5,7 +5,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ADMIN_SESSION_MS } from "../src/worker/admin";
 import type { Env } from "../src/worker/env";
-import { callback, cancel, confirm, exchangeCode, pendingToken, readPlayer } from "../src/worker/nanoterra";
+import { bindOf, callback, cancel, confirm, exchangeCode, pendingToken, readPlayer } from "../src/worker/nanoterra";
 import { Browser, ORIGIN } from "./api";
 import { makeDb, testAccount } from "./helpers";
 
@@ -39,19 +39,23 @@ const sessionCount = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FRO
 /** The `name=value` pair of a cookie that a response sets, as a browser sends it back. */
 const pairOf = (res: Response, name: string) => res.headers.getSetCookie().find((c) => c.startsWith(`${name}=`))?.split(";")[0] ?? null;
 /** A press of Continue (or Not me) as the confirm screen's form makes it. */
-const press = (what: "confirm" | "cancel", cookie: string | null, o: { origin?: string | null; ip?: string; method?: string; now?: number; e?: Env } = {}) => {
+const press = (what: "confirm" | "cancel", cookie: string | null, o: { origin?: string | null; ip?: string; method?: string; now?: number; e?: Env; bind?: string } = {}) => {
   const ip = o.ip ?? "203.0.113.9";
   const headers = new Headers({ "CF-Connecting-IP": ip });
   const origin = o.origin === undefined ? ORIGIN : o.origin;
   if (origin) headers.set("Origin", origin);
   if (cookie) headers.set("Cookie", cookie);
-  const req = new Request(`${ORIGIN}/nanoterra/${what}`, { method: o.method ?? "POST", headers });
-  return what === "confirm" ? confirm(o.e ?? env, req, ip, o.now) : Promise.resolve(cancel(req));
+  const method = o.method ?? "POST";
+  const body = method === "POST" && o.bind !== undefined ? new URLSearchParams({ bind: o.bind }) : undefined;
+  const req = new Request(`${ORIGIN}/nanoterra/${what}`, { method, headers, body });
+  return what === "confirm" ? confirm(o.e ?? env, req, ip, o.now) : cancel(o.e ?? env, req, o.now);
 };
+/** The `bind` field of the confirm screen in `html`. */
+const bindIn = (html: string) => /name="bind" value="([0-9a-f]{32})"/.exec(html)?.[1];
 /** The whole sign-in as a browser does it: the callback (the confirm screen), then Continue. */
 const signIn = async (code: string, ip: string, fetcher: typeof fetch) => {
   const shown = await visit(code, env, ip, fetcher);
-  const done = await press("confirm", pairOf(shown, "nanoterra-pending"), { ip });
+  const done = await press("confirm", pairOf(shown, "nanoterra-pending"), { ip, bind: bindIn(await shown.text()) });
   return { shown, done };
 };
 
@@ -70,6 +74,10 @@ describe("Sign in from Nanoterra", () => {
     expect(html).toContain('<form method="post" action="/nanoterra/confirm">');
     expect(html).toContain('<form method="post" action="/nanoterra/cancel">');
     expect(html).not.toContain(player.address);
+    // The Continue form carries a hash of the cookie's token (so a press is tied to this screen), never the token itself.
+    const cookieToken = decodeURIComponent(res.headers.getSetCookie()[0]!.split(";")[0]!.slice("nanoterra-pending=".length));
+    expect(bindIn(html)).toBe(await bindOf(cookieToken));
+    expect(html).not.toContain(cookieToken);
     // The only cookie is the one that waits for Continue: signed, 5 minutes, this site only, and no session cookie.
     const cookies = res.headers.getSetCookie();
     expect(cookies).toHaveLength(1);
@@ -205,11 +213,15 @@ describe("Sign in from Nanoterra", () => {
   it("Not me drops the pending cookie and makes no session", async () => {
     const before = await sessionCount();
     const shown = await visit(CODE, env, "203.0.113.50", nanoterra(200, answerOf()));
+    const bind = bindIn(await shown.clone().text());
     const res = await press("cancel", pairOf(shown, "nanoterra-pending"), { ip: "203.0.113.50" });
     expect(res.status).toBe(303);
     expect(res.headers.get("Location")).toBe("/");
     expect(res.headers.getSetCookie()).toHaveLength(1);
     expect(res.headers.getSetCookie()[0]).toMatch(/^nanoterra-pending=; Path=\/; Max-Age=0/);
+    expect(await sessionCount()).toBe(before);
+    // The token is used up: a copy of the cookie that someone kept does not sign in.
+    expect((await press("confirm", pairOf(shown, "nanoterra-pending"), { ip: "203.0.113.50", bind })).status).toBe(400);
     expect(await sessionCount()).toBe(before);
   });
 
@@ -248,7 +260,41 @@ describe("Sign in from Nanoterra", () => {
     expect((await press("confirm", `nanoterra-pending=${good}`, { ip: "203.0.113.63", now, origin: null })).status).toBe(403);
     expect(await sessionCount()).toBe(before);
     // And the good one, from the game's own page, works.
-    expect((await press("confirm", `nanoterra-pending=${good}`, { ip: "203.0.113.64", now })).status).toBe(303);
+    const bind = await bindOf(good);
+    expect((await press("confirm", `nanoterra-pending=${good}`, { ip: "203.0.113.64", now, bind })).status).toBe(303);
+    expect(await sessionCount()).toBe(before + 1);
+  });
+
+  it("a press is tied to its screen: a second callback in the same browser, or no bind field, makes no session", async () => {
+    const before = await sessionCount();
+    // The victim's screen is drawn, then an attacker's callback replaces the cookie (a second tab, or a link that the victim follows).
+    const victim = await visit(CODE, env, "203.0.113.80", nanoterra(200, answerOf({ username: "Victim" })));
+    const victimBind = bindIn(await victim.text());
+    const attacker = await visit(CODE, env, "203.0.113.81", nanoterra(200, answerOf({ username: "Mallory", address: owner.address, playerId: owner.address })));
+    const attackerCookie = pairOf(attacker, "nanoterra-pending");
+    // The browser now sends the ATTACKER's cookie, and the form of the victim's screen.
+    const res = await press("confirm", attackerCookie, { ip: "203.0.113.82", bind: victimBind });
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain("That sign-in changed");
+    expect((await press("confirm", attackerCookie, { ip: "203.0.113.83" })).status).toBe(400);
+    expect((await press("confirm", attackerCookie, { ip: "203.0.113.84", bind: "0".repeat(32) })).status).toBe(400);
+    expect(await sessionCount()).toBe(before);
+    // The attacker's own screen still works for the attacker's own press.
+    expect((await press("confirm", attackerCookie, { ip: "203.0.113.85", bind: bindIn(await attacker.text()) })).status).toBe(303);
+  });
+
+  it("a pending cookie works once: a second press with the same cookie makes no second session", async () => {
+    const shown = await visit(CODE, env, "203.0.113.90", nanoterra(200, answerOf()));
+    const cookie = pairOf(shown, "nanoterra-pending");
+    const bind = bindIn(await shown.text());
+    const before = await sessionCount();
+    expect((await press("confirm", cookie, { ip: "203.0.113.91", bind })).status).toBe(303);
+    expect(await sessionCount()).toBe(before + 1);
+    for (let i = 0; i < 3; i++) {
+      const again = await press("confirm", cookie, { ip: `203.0.113.${92 + i}`, bind });
+      expect(again.status).toBe(400);
+      expect(await again.text()).toContain("That sign-in was used");
+    }
     expect(await sessionCount()).toBe(before + 1);
   });
 
