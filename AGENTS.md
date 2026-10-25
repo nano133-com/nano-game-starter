@@ -18,7 +18,8 @@ creator's address. The Worker holds **no key**: it only reads the Nano ledger to
 | `src/client/ui/`, `src/client/style.css` | The sheets (looks, sign-in, pay) and the look of the page. Change with care (see "Never change"). |
 | `public/` | Static files: `art/wide.jpg`, `art/tall.jpg`, `favicon.svg`. |
 | `src/worker/` | The server. Money and sign-in live here. See "Never change". |
-| `src/shared/` | Code for both sides: amounts (`amount.ts`), looks, config, security headers. |
+| `src/shared/` | Code for both sides: amounts (`amount.ts`), looks (`looks.ts`, with the rules in `@nano133/looks`), the Shelf's numbers (`shelf.ts`), config, security headers. |
+| `src/client/shelf.ts` | The Shelf screen in `/admin`: the looks with what each has sold, and a draft to change. Browser only; it writes nothing. See "Rules for looks". |
 | `src/worker/nanoterra.ts` | Sign in from Nanoterra (`/nanoterra/callback`, `/nanoterra/confirm`, `/nanoterra/cancel`): trades a one-time code for the player's details, shows a confirm screen, makes a session on Continue. See "Never change". |
 | `migrations/` | The database tables. Add a new numbered file; never edit an applied one. |
 | `test/` | Tests for money, records and sign-in. |
@@ -61,6 +62,12 @@ npm run check      # typecheck + tests + build: run it before every commit
   To retire a look, keep it in the file.
 - Prices are in US dollars with at most 2 decimals. The server reads them from `looks.json`; the
   browser never decides a price.
+- The rules of the file are in the package `@nano133/looks` (`checkLooks`, `lookProblems`, `removalProblems`, `looksJson`). Use them; do not
+  copy them. (The old check refused $0.07, $0.29 and $1.10: `wholeCents` fixes that.)
+- **The Shelf (`/admin`) never writes.** It edits a draft in the creator's browser and gives text to copy. Do not add a server call that
+  changes `looks.json`, the database's looks or prices: an editor would give the server a new way to change data. A change of looks is a
+  change of the repository, pushed to GitHub.
+- `GITHUB_REPO` (a setting, `owner/name`) only makes the Shelf link to `looks.json`. It is not a secret and it gives the game no GitHub access.
 
 ## Never change (without the creator's clear yes, and new tests)
 

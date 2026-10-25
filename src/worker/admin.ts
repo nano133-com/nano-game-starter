@@ -4,7 +4,7 @@
 
 import { xnoText } from "../shared/amount";
 import { lookById } from "../shared/looks";
-import { receiveAddress, setting, testMode, turnstileOn, type Env } from "./env";
+import { githubRepo, receiveAddress, setting, testMode, turnstileOn, type Env } from "./env";
 import { fail } from "./http";
 import { nodesFor } from "./nodes";
 import type { OrderRow } from "./orders";
@@ -77,12 +77,14 @@ export async function adminSummary(env: Env, now = Date.now()) {
     turnstile: turnstileOn(env),
     nodes: nodesFor(env).map((n) => n.name),
     rate: rate ? { ...(JSON.parse(rate.value) as object), at: rate.at } : null,
+    repo: githubRepo(env),
     warnings,
     counts: count,
     totals: { paid: total("paid"), paidLate: total("paid_late") },
     orders: orders.map((o) => ({
       id: o.id,
       player: o.player,
+      lookId: o.look_id,
       look: lookById(o.look_id)?.name ?? o.look_id,
       usd: o.usd,
       xno: xnoText(o.amount),

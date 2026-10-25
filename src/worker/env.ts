@@ -19,6 +19,8 @@ export interface Env {
   NANOTERRA_CLIENT_ID?: string;
   /** Secret: the client secret that Nanoterra showed once. Add it with `npx wrangler secret put NANOTERRA_SECRET`. */
   NANOTERRA_SECRET?: string;
+  /** Optional: this game's repository on GitHub as "owner/name", so the Shelf screen in /admin can link to looks.json. A setting, not a secret. */
+  GITHUB_REPO?: string;
   /** Tests only: where the exchange goes instead of https://nano133.com. */
   NANOTERRA_ORIGIN?: string;
 }
@@ -55,6 +57,12 @@ export function setting(v?: string): string | undefined {
 /** Whether Nanoterra sign-in is set up: the client id and the secret are both set. */
 export function nanoterraOn(env: Env): boolean {
   return Boolean(setting(env.NANOTERRA_CLIENT_ID) && setting(env.NANOTERRA_SECRET));
+}
+
+/** The game's GitHub repository as "owner/name", or null when it is not set or not shaped like one. */
+export function githubRepo(env: Env): string | null {
+  const r = setting(env.GITHUB_REPO);
+  return r && /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/.test(r) ? r : null;
 }
 
 export function turnstileOn(env: Env): boolean {

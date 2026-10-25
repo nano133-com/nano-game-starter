@@ -40,6 +40,20 @@ straight to your own wallet. You change the game with your AI assistant.
    program opens ([nano133.com/build/islands](https://nano133.com/build/islands)), Nano Island lists your
    game from that file; the sale stays with you.
 
+## The Shelf: see and change your looks
+
+Open `/admin` and look at **Shelf**. It shows each look with a small picture, its price (and its step on the
+[price ladder](https://nano133.com/build/cosmetics), from 1¢ to $1), and what it has sold in your own database. Press
+**Edit the shelf** to change a name, a price, a colour or a hat, add a look, or copy one. The page checks every change with
+the rules of [`@nano133/looks`](https://www.npmjs.com/package/@nano133/looks): at least one free look, prices in whole cents, and **a
+look that a player owns stays in the file** (it cannot be removed here).
+
+**The Shelf changes nothing in your game.** It works on a draft in your browser and sends nothing to the server, nothing to nano133.com and
+nothing to GitHub. When you like the draft, press **Copy looks.json** and put the text in `looks.json` in your repository, or press
+**Copy a message for my AI** and give it to your AI assistant. Push to GitHub: your game builds again and the new looks go live. If you set
+`GITHUB_REPO` (for example `your-name/your-game`) in `wrangler.jsonc`, the Shelf also links to `looks.json` on GitHub. The Shelf is part of
+the starter and you can delete it: the game does not need it.
+
 ## Sign in from Nanoterra
 
 When your game is listed in Nanoterra, a player who is signed in at nano133.com can press Play and arrive here signed in. The

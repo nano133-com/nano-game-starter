@@ -5,6 +5,7 @@ import "./style.css";
 import "./admin.css";
 import { ApiError, get, post, type Config } from "./ui/api";
 import { h, shortAddress } from "./ui/dom";
+import { shelfView } from "./shelf";
 import { signInView } from "./ui/signin";
 
 type Summary = {
@@ -13,10 +14,11 @@ type Summary = {
   turnstile: boolean;
   nodes: string[];
   rate: { usd: number; sources: string[]; at: number } | null;
+  repo: string | null;
   warnings: string[];
   counts: { open: number; paid: number; expired: number; paid_late: number };
   totals: { paid: { count: number; xno: string; usd: string }; paidLate: { count: number; xno: string; usd: string } };
-  orders: { id: string; player: string; look: string; usd: string; xno: string; status: string; createdAt: number; expiresAt: number; paidAt: number | null; payer: string | null; hash: string | null }[];
+  orders: { id: string; player: string; lookId: string; look: string; usd: string; xno: string; status: string; createdAt: number; expiresAt: number; paidAt: number | null; payer: string | null; hash: string | null }[];
   players: { player: string; looks: { id: string; name: string; at: number }[] }[];
 };
 
@@ -24,6 +26,8 @@ const gate = document.getElementById("gate")!;
 const data = document.getElementById("data")!;
 const STATUS_WORDS: Record<string, string> = { open: "Open", paid: "Paid", expired: "Expired", paid_late: "Paid late" };
 let filter = "all";
+/** The Shelf keeps its draft while the page redraws (a tab, a payment check): one view for the life of the page. */
+let shelf: ReturnType<typeof shelfView> | null = null;
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const when = (ms: number | null) => (ms ? new Date(ms).toLocaleString() : "");
@@ -83,6 +87,13 @@ function signOutButton() {
     },
     "Sign out",
   );
+}
+
+function shelfCard(s: Summary): HTMLElement {
+  const d = { orders: s.orders, players: s.players, repo: s.repo };
+  if (shelf) shelf.update(d);
+  else shelf = shelfView(d);
+  return shelf.el;
 }
 
 function render(s: Summary) {
@@ -152,6 +163,7 @@ function render(s: Summary) {
       h("div", { class: "total" }, h("span", {}, "Paid late (send back)"), h("strong", {}, `${s.totals.paidLate.xno} XNO`), h("small", {}, `$${s.totals.paidLate.usd} · ${plural(s.totals.paidLate.count, "order")}`)),
       h("div", { class: "total" }, h("span", {}, "Open now"), h("strong", {}, String(s.counts.open)), h("small", {}, `${s.counts.expired} expired`)),
     ),
+    shelfCard(s),
     h("section", { class: "admin-card" }, h("div", { class: "card-head" }, h("h2", {}, "Orders"), h("div", {}, check, " ", checkNote)), tabs, orders),
     h("section", { class: "admin-card" }, h("h2", {}, "Owned looks"), players),
     h(

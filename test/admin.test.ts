@@ -92,6 +92,24 @@ describe("the admin guard", () => {
   });
 });
 
+describe("what the Shelf reads from the summary", () => {
+  it("names the look of each order by id (the name can change; the id never does)", async () => {
+    const buyer = await signedIn(player.address);
+    expect((await buyer.call(live(), "/api/orders", { body: { lookId: "sunset" } })).status).toBe(201);
+    const r = await (await signedIn(owner.address)).call(live(), "/api/admin/summary");
+    expect(r.body.orders).toHaveLength(1);
+    expect(r.body.orders[0]).toMatchObject({ lookId: "sunset", look: "Sunset" });
+  });
+
+  it("gives the game's repository only when it is shaped like owner/name", async () => {
+    const admin = await signedIn(owner.address);
+    const repo = async (v: string | undefined) => (await admin.call({ ...live(), GITHUB_REPO: v }, "/api/admin/summary")).body.repo;
+    expect(await repo("wes/gem-island-test")).toBe("wes/gem-island-test");
+    expect(await repo(" wes/gem.island_test ")).toBe("wes/gem.island_test");
+    for (const bad of [undefined, "", "none", "wes", "wes/", "/x", "a/b/c", "https://evil.test/x", "wes/x y", "wes/x?y=1", "wes/..%2f", `${"a".repeat(101)}/x`]) expect(await repo(bad), String(bad)).toBeNull();
+  });
+});
+
 describe("test mode", () => {
   it("with the example address, a pay screen gets no address and no payment link", async () => {
     const env = { DB: db, RECEIVE_ADDRESS: EXAMPLE_ADDRESS, TEST_MODE: "off" };

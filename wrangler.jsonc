@@ -41,7 +41,9 @@
     "TURNSTILE_SITE_KEY": "none",
     // Optional: the client id that Nanoterra gives your game on its launch page (nano133.com/build/nanoterra/launch, step 6). With the
     // secret NANOTERRA_SECRET it lets a player who is signed in at Nanoterra arrive here signed in. `none` means not set.
-    "NANOTERRA_CLIENT_ID": "none"
+    "NANOTERRA_CLIENT_ID": "none",
+    // Optional: your game's repository on GitHub, like "your-name/your-game". The Shelf screen in /admin then links to your looks.json. `none` means not set.
+    "GITHUB_REPO": "none"
   },
   // Secrets are never written here. Add them with `npx wrangler secret put <NAME>` or in the
   // dashboard: NODE_API_KEY (a free Nanswap Nodes key), TURNSTILE_SECRET and NANOTERRA_SECRET. See .dev.vars.example.
