@@ -1,6 +1,6 @@
 // The Shelf screen in /admin: the game's looks with what each has sold, and a draft you can change in this page. It runs only in
 // the creator's own browser, on the creator's own game. It changes NOTHING on the game: the new looks.json is text to copy and put
-// in the repository (there is no server call that writes looks, on purpose). Its rules are in @nano133/looks.
+// in the repository (there is no server call that writes looks, on purpose). Its rules are in @nano133/nanoterra (path /looks).
 
 import { diffLooks, HATS, looksJson, lookProblems, PRICE_LADDER, priceText, removalProblems, rungOf, rungUsd, slugId, usdText, type Hat, type Look, type Problem } from "@nano133/nanoterra/looks";
 import { LOOKS } from "../shared/looks";
