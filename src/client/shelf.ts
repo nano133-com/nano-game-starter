@@ -2,7 +2,7 @@
 // the creator's own browser, on the creator's own game. It changes NOTHING on the game: the new looks.json is text to copy and put
 // in the repository (there is no server call that writes looks, on purpose). Its rules are in @nano133/looks.
 
-import { diffLooks, HATS, looksJson, lookProblems, PRICE_LADDER, priceText, removalProblems, rungOf, rungUsd, slugId, usdText, type Hat, type Look, type Problem } from "@nano133/looks";
+import { diffLooks, HATS, looksJson, lookProblems, PRICE_LADDER, priceText, removalProblems, rungOf, rungUsd, slugId, usdText, type Hat, type Look, type Problem } from "@nano133/nanoterra/looks";
 import { LOOKS } from "../shared/looks";
 import { aiPrompt, changeText, ownedIds, shelfStats, soldText, type ShelfOrder, type ShelfPlayer } from "../shared/shelf";
 import { copy, h } from "./ui/dom";

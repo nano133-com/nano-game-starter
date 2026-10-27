@@ -1,7 +1,7 @@
 // The numbers and the words of the Shelf screen in /admin (src/client/shelf.ts draws it). Pure: no page, no network. Everything
 // here comes from the game's own database (the admin summary) and from looks.json; nothing is sent anywhere.
 
-import type { Look, LooksDiff } from "@nano133/looks";
+import type { Look, LooksDiff } from "@nano133/nanoterra/looks";
 
 export type ShelfOrder = { lookId: string; status: string; usd: string };
 export type ShelfPlayer = { looks: { id: string }[] };

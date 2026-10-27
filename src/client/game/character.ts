@@ -1,27 +1,30 @@
 // The player's character. Two are here, and game.config.json's "character" picks one:
-//   "nanoterra"  the Nanoterra island character (nanoterraCharacter.ts, the package @nano133/character): a player who signed in from
-//                Nanoterra plays in the look they have there, and a look of this game's shop paints the shirt and puts its hat on.
+//   "nanoterra"  the Nanoterra island character (nanoterraCharacter.ts, the package @nano133/nanoterra): a player who signed in from
+//                Nanoterra plays as the character they picked there, and a look of this game's shop paints the shirt and puts its hat on.
 //   "own"        the little penguin below: toon shapes, and a look (a body colour and a hat) from looks.json.
 // Both do what `Avatar` says, so the game (game.ts) does not know which one it has.
 
 import * as THREE from "three";
-import type { Look as NanoterraLook } from "@nano133/character";
+import type { Look as NanoterraLook } from "@nano133/nanoterra";
 import { CONFIG } from "../../shared/config";
 import type { Look } from "../../shared/looks";
 import { buildHat, disposeHat } from "./hat";
 import { NanoterraCharacter } from "./nanoterraCharacter";
 import { toon } from "./world";
 
+/** The player's Nanoterra character as `/api/me` gives it: the five colours, and the whole record (two numbers on closed lists) when Nanoterra sent one. */
+export type NanoterraPlayer = { look: NanoterraLook | null; record?: { v: 2; k: readonly [number, number] } | null };
+
 /** What the game needs of a character. */
 export interface Avatar {
   /** Put it in the scene, move it with `position`, turn it with `rotation.y` (it faces +z). */
   readonly group: THREE.Object3D;
-  /** The blob shadow: put it in the scene too. */
+  /** The blob shadow: put it in the scene too. (The Nanoterra character has its shadow in its body: this is empty for it.) */
   readonly ground: THREE.Object3D;
   /** The look of this game's shop (looks.json) that the player wears. */
   wear(look: Look): void;
-  /** The look that the player has in Nanoterra, or null for a player who did not come from there. */
-  setNanoterra(look: NanoterraLook | null): void;
+  /** The character that the player has in Nanoterra, or null for a player who did not come from there. */
+  setNanoterra(player: NanoterraPlayer | null): void;
   /** One frame. `group.position` is already where the character stands. `speed` is metres a second over the ground. */
   animate(dt: number, motion: { speed: number; airborne: boolean; verticalSpeed: number }): void;
 }

@@ -4,7 +4,7 @@
 // package @nano133/looks, so the game and the Shelf screen in /admin check the same words.
 
 import list from "../../looks.json" with { type: "json" };
-import { checkLooks, HATS, usdText, type Hat, type Look } from "@nano133/looks";
+import { checkLooks, HATS, usdText, type Hat, type Look } from "@nano133/nanoterra/looks";
 
 export { checkLooks, HATS, usdText };
 export type { Hat, Look };

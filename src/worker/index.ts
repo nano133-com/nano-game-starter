@@ -36,8 +36,7 @@ export function listing(env: Env, req: Request) {
     ages: CONFIG.ages,
     // How this game signs a Nanoterra player in ("exchange": /nanoterra/callback trades a one-time code for the player's details).
     signin: CONFIG.signin,
-    // The character the game plays in ("nanoterra": the Nanoterra island character; "own": the game's own). Nanoterra does not read it.
-    character: CONFIG.character,
+    // The character is NOT here: its one switch is "character" in game.config.json ("nanoterra" or "own"), and only the game's own code reads it.
   };
 }
 
@@ -146,9 +145,10 @@ export async function handleApi(req: Request, env: Env, now = Date.now()): Promi
   if (method === "GET" && path === "/api/me") {
     if (!session) return json({ address: null, owned: [], admin: false });
     const owned = (await db.prepare("SELECT look_id FROM owned WHERE player = ?").bind(session.address).all<{ look_id: string }>()).results.map((r) => r.look_id);
-    // The name and the character of a player who signed in from Nanoterra (the game's own screens may show them).
+    // The name and the character of a player who signed in from Nanoterra (the game's own screens may show them). `look`: the five colours; `record`: the whole character
+    // (two numbers, `unpackRecord` in the page reads them), when Nanoterra sent one.
     const nanoterra = session.via === "nanoterra" ? await playerOf(db, session.address) : null;
-    return json({ address: session.address, owned, admin: session.via === "wallet" && session.address === receiveAddress(env), via: session.via, ...(nanoterra ? { username: nanoterra.username, look: nanoterra.look, nanoterraItems: nanoterra.items } : {}) });
+    return json({ address: session.address, owned, admin: session.via === "wallet" && session.address === receiveAddress(env), via: session.via, ...(nanoterra ? { username: nanoterra.username, look: nanoterra.look, ...(nanoterra.record ? { record: { v: 2, k: nanoterra.record } } : {}), nanoterraItems: nanoterra.items } : {}) });
   }
 
   if (path === "/api/orders" && method === "POST") {

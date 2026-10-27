@@ -4,8 +4,7 @@
 import * as THREE from "three";
 import { CONFIG } from "../../shared/config";
 import type { Look } from "../../shared/looks";
-import type { Look as NanoterraLook } from "@nano133/character";
-import { makeAvatar, type Avatar } from "./character";
+import { makeAvatar, type Avatar, type NanoterraPlayer } from "./character";
 import { Controls } from "./controls";
 import { Gems } from "./gems";
 import { buildWorld, ISLAND_RADIUS, toonRamp, type Collider } from "./world";
@@ -99,9 +98,9 @@ export class Game {
     this.character.wear(look);
   }
 
-  /** The look that the player has in Nanoterra (they signed in from there), or null. */
-  setNanoterra(look: NanoterraLook | null) {
-    this.character.setNanoterra(look);
+  /** The character that the player has in Nanoterra (they signed in from there), or null. */
+  setNanoterra(player: NanoterraPlayer | null) {
+    this.character.setNanoterra(player);
   }
 
   start() {

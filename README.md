@@ -47,7 +47,7 @@ straight to your own wallet. You change the game with your AI assistant.
 Open `/admin` and look at **Shelf**. It shows each look with a small picture, its price (and its step on the
 [price ladder](https://nano133.com/build/cosmetics), from 1¢ to $1), and what it has sold in your own database. Press
 **Edit the shelf** to change a name, a price, a colour or a hat, add a look, or copy one. The page checks every change with
-the rules of [`@nano133/looks`](https://www.npmjs.com/package/@nano133/looks): at least one free look, prices in whole cents, and **a
+the rules of the looks ladder in [`@nano133/nanoterra`](https://www.npmjs.com/package/@nano133/nanoterra) (path `/looks`): at least one free look, prices in whole cents, and **a
 look that a player owns stays in the file** (it cannot be removed here).
 
 **The Shelf changes nothing in your game.** It works on a draft in your browser and sends nothing to the server, nothing to nano133.com and
@@ -80,12 +80,17 @@ To switch it on:
 What a player signed in from Nanoterra gets here: a session for the address Nanoterra named. It can show the player's name,
 own looks and order looks like any signed-in player. It **never opens `/admin`**: only a wallet signature does.
 
-**The character.** With `"character": "nanoterra"` in `game.config.json` (the default) the player is the Nanoterra island character
-(the package [`@nano133/character`](https://www.npmjs.com/package/@nano133/character)). A player who signed in from Nanoterra plays in the
-look they have there (skin, hair, shirt, trousers, shoes); anyone else has the island's first look. A look from your shop (`looks.json`)
-that costs something paints the shirt with its body colour, and any look that has a hat puts it on. The free look leaves the player's colours
-alone. Set `"character": "own"` for the little penguin of `character.ts` (or for a character of your own). The Nanoterra cosmetics that
-the player owns come with the sign-in (`nanoterraItems` in `/api/me`) but are not drawn: the package does not draw them yet.
+**The character.** One switch, in one file: `game.config.json` says `"character": "nanoterra"` (the default) or `"own"`. Nothing else reads it
+(the listing file `nano-game.json` does not carry it). With `"nanoterra"` the player is the Nanoterra island character, drawn by the package
+[`@nano133/nanoterra`](https://www.npmjs.com/package/@nano133/nanoterra) (path `/character`: the same code that nano133.com's island draws with). A player who
+signed in from Nanoterra plays as the character they picked there: the base (a person, a round one, a bear, a bee, a robot or a pineapple), the face, the hair, the
+clothes, the size and the colours, which come with the sign-in as the player's *record* (two whole numbers on closed lists, kept in your own database, and
+checked again with the lists before the game draws them). A player whose Nanoterra sent no record plays in their five colours on the person body; anyone
+else has the island's first look. A look from your shop (`looks.json`) that costs something paints the shirt with its body colour (the body, for a character
+that wears no top, as Nanoterra's own shirt dyes do), and any look that has a hat puts it on the head of whatever body the player has. The free look leaves
+the player's character alone. The body is display only: the collider, the jump and the reach are the same for every base and size. Set `"character": "own"`
+for the little penguin of `character.ts` (or for a character of your own). The Nanoterra cosmetics that the player owns come with the sign-in
+(`nanoterraItems` in `/api/me`) but are not drawn: the package draws the body only (a later version adds the item art).
 
 **Be honest about whose account it is.** Anyone can send a victim's browser to a callback link that holds the attacker's own
 code within its 60 seconds. This starter therefore asks first ("Sign in as <name>? Continue / Not me") and signs nobody in without that
@@ -136,7 +141,7 @@ The tests use a fake Nano node and keys made in the test: no network and no mone
 
 | File | What |
 |---|---|
-| `game.config.json` | The game's name, its one line, your name, the round's length |
+| `game.config.json` | The game's name, its one line, your name, the round's length, and the character switch (`"character": "nanoterra"` or `"own"`) |
 | `looks.json` | The looks, their prices in US dollars and what they change |
 | `src/client/game/` | The 3D game: the island (`world.ts`), the character, the gems, the rules (`game.ts`) |
 | `public/art/` | The listing pictures (`wide.jpg` 1600×900, `tall.jpg` 900×1600) |

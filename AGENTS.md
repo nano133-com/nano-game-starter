@@ -12,13 +12,13 @@ creator's address. The Worker holds **no key**: it only reads the Nano ledger to
 
 | Path | What |
 |---|---|
-| `game.config.json` | Name, one line, creator name, listing pictures, round length. Safe to change. |
+| `game.config.json` | Name, one line, creator name, listing pictures, round length, and the one character switch (`"character"`). Safe to change. |
 | `looks.json` | The looks: `id`, `name`, `priceUsd`, and `change` (`body` colour, optional `hat` and `hatColor`). Safe to change, with the rules below. |
 | `src/client/game/` | The game: `world.ts` (the level), `character.ts` (what a character does, and the penguin), `nanoterraCharacter.ts` (the Nanoterra character), `hat.ts`, `gems.ts`, `controls.ts`, `game.ts` (rules, speed, camera). Safe to change. |
 | `src/client/ui/`, `src/client/style.css` | The sheets (looks, sign-in, pay) and the look of the page. Change with care (see "Never change"). |
 | `public/` | Static files: `art/wide.jpg`, `art/tall.jpg`, `favicon.svg`. |
 | `src/worker/` | The server. Money and sign-in live here. See "Never change". |
-| `src/shared/` | Code for both sides: amounts (`amount.ts`), looks (`looks.ts`, with the rules in `@nano133/looks`), the Shelf's numbers (`shelf.ts`), config, security headers. |
+| `src/shared/` | Code for both sides: amounts (`amount.ts`), looks (`looks.ts`, with the rules in `@nano133/nanoterra/looks`), the Shelf's numbers (`shelf.ts`), config, security headers. |
 | `src/client/shelf.ts` | The Shelf screen in `/admin`: the looks with what each has sold, and a draft to change. Browser only; it writes nothing. See "Rules for looks". |
 | `src/worker/nanoterra.ts` | Sign in from Nanoterra (`/nanoterra/callback`, `/nanoterra/confirm`, `/nanoterra/cancel`): trades a one-time code for the player's details, shows a confirm screen, makes a session on Continue. See "Never change". |
 | `migrations/` | The database tables. Add a new numbered file; never edit an applied one. |
@@ -44,11 +44,13 @@ npm run check      # typecheck + tests + build: run it before every commit
   colours, the sky, the island's size (`ISLAND_RADIUS`).
 - **The rules:** speed, jump, gravity and camera in `game.ts`; the round's length and the number of
   gems in `game.config.json`; how gems score in `gems.ts`.
-- **The character:** `game.config.json` `character` picks `"nanoterra"` (the default: `nanoterraCharacter.ts`, the package
-  `@nano133/character`, in the look the player has in Nanoterra) or `"own"` (the penguin in `character.ts`). Both do what `Avatar` in
-  `character.ts` says, so `game.ts` does not know which it has. The hats are in `hat.ts` and both wear them: a new hat needs its name in
-  `HATS` (`src/shared/looks.ts`) and a `case` in `buildHat`. A shop look that costs something paints the Nanoterra character's shirt; the free
-  look must never hide the look that a signed-in player brought.
+- **The character:** `game.config.json` `character` is the ONE switch: `"nanoterra"` (the default: `nanoterraCharacter.ts`, the package
+  `@nano133/nanoterra`, path `/character`, as the character the player picked in Nanoterra: the record that `/api/me` gives) or `"own"` (the penguin in
+  `character.ts`). Do not read it anywhere else, and do not put it in `nano-game.json` (the listing does not carry it). Both do what `Avatar` in
+  `character.ts` says, so `game.ts` does not know which it has. The hats are in `hat.ts` and both wear them (on a Nanoterra body each base has its own head: the kit's
+  `BASE_SPECS[base].hat` says where a hat sits): a new hat needs its name in `HATS` (`src/shared/looks.ts`) and a `case` in `buildHat`. A shop look that costs
+  something paints the Nanoterra character's shirt (its body when it wears no top); the free look must never hide the character that a signed-in player brought.
+  The body is display only: never give a base or a size a different collider, jump or reach.
 - **Looks:** add a look to `looks.json` with a new `id`. Keep one free look (`priceUsd: 0`).
 - Keep the first load small (no big model or sound files without a reason), and keep 60 frames a
   second on a mid-range phone: few objects, simple materials, no real-time shadows.
@@ -62,7 +64,7 @@ npm run check      # typecheck + tests + build: run it before every commit
   To retire a look, keep it in the file.
 - Prices are in US dollars with at most 2 decimals. The server reads them from `looks.json`; the
   browser never decides a price.
-- The rules of the file are in the package `@nano133/looks` (`checkLooks`, `lookProblems`, `removalProblems`, `looksJson`). Use them; do not
+- The rules of the file are in the package `@nano133/nanoterra`, path `/looks` (`checkLooks`, `lookProblems`, `removalProblems`, `looksJson`). Use them; do not
   copy them. (The old check refused $0.07, $0.29 and $1.10: `wholeCents` fixes that.)
 - **The Shelf (`/admin`) never writes.** It edits a draft in the creator's browser and gives text to copy. Do not add a server call that
   changes `looks.json`, the database's looks or prices: an editor would give the server a new way to change data. A change of looks is a

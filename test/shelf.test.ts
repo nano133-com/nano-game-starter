@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diffLooks, looksJson, type Look } from "@nano133/looks";
+import { diffLooks, looksJson, type Look } from "@nano133/nanoterra/looks";
 import { aiPrompt, centsOf, changeText, ownedIds, shelfStats, soldText } from "../src/shared/shelf";
 
 const look = (id: string, priceUsd = 0.25): Look => ({ id, name: id, priceUsd, change: { body: "#336699" } });

@@ -136,7 +136,7 @@ function renderAccount() {
 
 /** The character in the look the player has in Nanoterra (a sign-in from there), and in the shop's look that they wear. */
 function dress() {
-  game.setNanoterra(me.via === "nanoterra" ? me.look ?? null : null);
+  game.setNanoterra(me.via === "nanoterra" ? { look: me.look ?? null, record: me.record ?? null } : null);
   game.wear(wornLook());
 }
 

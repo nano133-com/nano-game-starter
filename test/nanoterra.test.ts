@@ -2,6 +2,7 @@
 // the server and shows a confirm screen; only a press of Continue (from the same browser and the game's own page) makes a session,
 // and that session never opens /admin. Nanoterra itself is a stand-in here (a fake fetch).
 
+import { baseRecord, packRecord, unpackRecord } from "@nano133/nanoterra/character/record";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ADMIN_SESSION_MS } from "../src/worker/admin";
 import type { Env } from "../src/worker/env";
@@ -315,7 +316,7 @@ describe("Sign in from Nanoterra", () => {
   });
 
   it("readPlayer keeps only what it knows, and exchangeCode times out as a refusal", async () => {
-    expect(readPlayer(answerOf())).toEqual({ username: "Ann", address: player.address, look: LOOK, items: ["hub.sun-hat"] });
+    expect(readPlayer(answerOf())).toEqual({ username: "Ann", address: player.address, look: LOOK, record: null, items: ["hub.sun-hat"] });
     expect(readPlayer(answerOf({ character: { v: 1, look: LOOK, items: ["ok.id", 5, "BAD ID", "x".repeat(60), "a.b-c"] } }))!.items).toEqual(["ok.id", "a.b-c"]);
     expect(readPlayer(null)).toBeNull();
     expect(readPlayer([])).toBeNull();
@@ -323,8 +324,51 @@ describe("Sign in from Nanoterra", () => {
     expect(await exchangeCode(env, CODE, slow)).toBeNull();
   });
 
-  it("the listing says how the game signs a player in", async () => {
+  it("the listing says how the game signs a player in, and does not carry the character switch (game.config.json is the one place)", async () => {
     const { listing } = await import("../src/worker/index");
-    expect(listing(env, new Request(`${ORIGIN}/nano-game.json`)).signin).toBe("exchange");
+    const l = listing(env, new Request(`${ORIGIN}/nano-game.json`));
+    expect(l.signin).toBe("exchange");
+    expect("character" in l).toBe(false);
+  });
+
+  describe("the whole character (the record)", () => {
+    const bee = baseRecord("bee");
+    const claim = { v: 2, k: packRecord(bee) };
+    const withRecord = (record: unknown) => answerOf({ character: { v: 1, look: LOOK, record, items: [] } });
+
+    it("readPlayer keeps a record that is whole, and only that", () => {
+      expect(readPlayer(withRecord(claim))!.record).toEqual(packRecord(bee));
+      const [a, b] = packRecord(bee);
+      const off = (a & ((1 << 25) - 1)) | (7 << 25); // the base has six values in three bits: 7 is a whole number and not a base
+      for (const bad of [undefined, null, 7, "x", {}, { v: 1, k: [a, b] }, { v: 2 }, { v: 2, k: [a] }, { v: 2, k: [a, b, 0] }, { v: 2, k: [a, 1.5] }, { v: 2, k: [-1, b] }, { v: 2, k: ["1", "2"] }, { v: 2, k: [off, b] }, { v: 2, k: [2 ** 28, b] }]) {
+        const p = readPlayer(withRecord(bad));
+        expect(p, JSON.stringify(bad)).not.toBeNull(); // the sign-in still works: the game plays in the five colours
+        expect(p!.record, JSON.stringify(bad)).toBeNull();
+      }
+    });
+
+    it("a sign-in keeps the record, /api/me gives it, and a later sign-in without one clears it", async () => {
+      const mine = testAccount();
+      const browser = new Browser();
+      const { done } = await signIn(CODE, "203.0.113.21", nanoterra(200, answerOf({ address: mine.address, playerId: mine.address, character: { v: 1, look: LOOK, record: claim, items: [] } })));
+      browser.jar.set("session", decodeURIComponent(pairOf(done, "session")!.slice("session=".length)));
+      const me = await browser.call(env, "/api/me");
+      expect(me.body).toMatchObject({ look: LOOK, record: claim });
+      expect(unpackRecord(...(me.body.record.k as [number, number]))).toEqual(bee);
+      // The sign-in of a player whose Nanoterra sent no record: the old record does not stay.
+      await visit(CODE, env, "203.0.113.22", nanoterra(200, answerOf({ address: mine.address, playerId: mine.address })));
+      const again = await browser.call(env, "/api/me");
+      expect(again.body.record).toBeUndefined();
+      expect(again.body.look).toEqual(LOOK);
+    });
+
+    it("a stored record that is not whole is not given out", async () => {
+      const mine = testAccount();
+      await env.DB.prepare("INSERT INTO nanoterra_players (address, username, look, record, items, updated_at) VALUES (?, 'Cy', ?, ?, '[]', 1)").bind(mine.address, JSON.stringify(LOOK), JSON.stringify([2 ** 29, 7])).run();
+      const { playerOf } = await import("../src/worker/nanoterra");
+      const p = await playerOf(env.DB, mine.address);
+      expect(p!.record).toBeNull();
+      expect(p!.look).toEqual(LOOK);
+    });
   });
 });

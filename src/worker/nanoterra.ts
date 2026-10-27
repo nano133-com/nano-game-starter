@@ -15,6 +15,7 @@
 // a session made here (`via: "nanoterra"`) never opens /admin (admin.ts). The secret stays in the Worker: never put it in a
 // page, a log or a message. DO NOT CHANGE the checks in this file.
 
+import { unpackRecord } from "@nano133/nanoterra/character/record";
 import { validAddress } from "@nano133/signin/verify";
 import { nanoterraOn, setting, type Env } from "./env";
 import { json, randomHex, readCookie, sameOrigin, setCookie, sha256Hex, tooLarge } from "./http";
@@ -38,8 +39,10 @@ const PENDING_LABEL = "nano-game-starter: a Nanoterra sign-in waits for Continue
 const text = new TextEncoder();
 
 export type Look = Record<(typeof LOOK_PARTS)[number], string>;
-/** What Nanoterra sends for a signed-in player. `playerId` is the address now: use the address. */
-export type Player = { username: string; address: string; look: Look; items: string[] };
+/** The player's whole character as Nanoterra sends it: the two numbers of `packRecord`, each a whole number on the closed lists (`unpackRecord` reads them). */
+export type PackedRecord = [number, number];
+/** What Nanoterra sends for a signed-in player. `playerId` is the address now: use the address. `record`: null for a sign-in from before Nanoterra sent it, or one that is not whole. */
+export type Player = { username: string; address: string; look: Look; record: PackedRecord | null; items: string[] };
 
 /** The answer of Nanoterra's token call, read strictly: anything of another shape is null. */
 export function readPlayer(v: unknown): Player | null {
@@ -48,7 +51,7 @@ export function readPlayer(v: unknown): Player | null {
   const { username, address, playerId, character } = o as { username?: unknown; address?: unknown; playerId?: unknown; character?: unknown };
   if (typeof username !== "string" || !username.trim() || username.length > 60) return null;
   if (typeof address !== "string" || !validAddress(address) || playerId !== address) return null;
-  const c = character as { v?: unknown; look?: unknown; items?: unknown } | null;
+  const c = character as { v?: unknown; look?: unknown; record?: unknown; items?: unknown } | null;
   if (!c || c.v !== 1 || !c.look || typeof c.look !== "object" || !Array.isArray(c.items)) return null;
   const look = {} as Look;
   for (const part of LOOK_PARTS) {
@@ -57,7 +60,14 @@ export function readPlayer(v: unknown): Player | null {
     look[part] = colour;
   }
   const items = c.items.slice(0, 64).filter((id): id is string => typeof id === "string" && id.length <= 48 && /^[a-z0-9.-]+$/.test(id));
-  return { username: username.trim(), address, look, items };
+  return { username: username.trim(), address, look, record: packedOf(c.record), items };
+}
+
+/** The character's record from Nanoterra's `{ v: 2, k: [a, b] }`, or null when it is not there or not whole (the game then uses the five colours): never trusted without the lists. */
+export function packedOf(record: unknown): PackedRecord | null {
+  const r = record as { v?: unknown; k?: unknown } | null;
+  if (!r || typeof r !== "object" || r.v !== 2 || !Array.isArray(r.k) || r.k.length !== 2) return null;
+  return unpackRecord(r.k[0], r.k[1]) ? [r.k[0] as number, r.k[1] as number] : null;
 }
 
 /** Trades the code for the player's details: one call from this server. Null for every refusal and every fault. */
@@ -156,9 +166,9 @@ export async function callback(env: Env, req: Request, ip: string, now = Date.no
   if (!player) return page(400, "That sign-in did not work", "The sign-in code was refused or has run out. Press Play in Nanoterra again.");
   // What Nanoterra says about this address is kept now (it is that address's own data, and the exchange proved the code and the secret).
   await env.DB.prepare(
-    "INSERT INTO nanoterra_players (address, username, look, items, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(address) DO UPDATE SET username = excluded.username, look = excluded.look, items = excluded.items, updated_at = excluded.updated_at",
+    "INSERT INTO nanoterra_players (address, username, look, record, items, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(address) DO UPDATE SET username = excluded.username, look = excluded.look, record = excluded.record, items = excluded.items, updated_at = excluded.updated_at",
   )
-    .bind(player.address, player.username, JSON.stringify(player.look), JSON.stringify(player.items), now)
+    .bind(player.address, player.username, JSON.stringify(player.look), player.record ? JSON.stringify(player.record) : null, JSON.stringify(player.items), now)
     .run();
   return confirmPage(req, player, await pendingToken(env, player.address, now));
 }
@@ -201,11 +211,13 @@ export async function cancel(env: Env, req: Request, now = Date.now()): Promise<
 }
 
 /** The name and the character kept from the player's last Nanoterra sign-in, for the game's own screens (`/api/me`). */
-export async function playerOf(db: D1Database, address: string): Promise<{ username: string; look: Look; items: string[] } | null> {
-  const row = await db.prepare("SELECT username, look, items FROM nanoterra_players WHERE address = ?").bind(address).first<{ username: string; look: string; items: string }>();
+export async function playerOf(db: D1Database, address: string): Promise<{ username: string; look: Look; record: PackedRecord | null; items: string[] } | null> {
+  const row = await db.prepare("SELECT username, look, record, items FROM nanoterra_players WHERE address = ?").bind(address).first<{ username: string; look: string; record: string | null; items: string }>();
   if (!row) return null;
   try {
-    return { username: row.username, look: JSON.parse(row.look) as Look, items: JSON.parse(row.items) as string[] };
+    // Read again with the same care as at the sign-in: a stored value that is not whole is left out.
+    const k = row.record ? (JSON.parse(row.record) as unknown) : null;
+    return { username: row.username, look: JSON.parse(row.look) as Look, record: Array.isArray(k) ? packedOf({ v: 2, k }) : null, items: JSON.parse(row.items) as string[] };
   } catch {
     return null;
   }

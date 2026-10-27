@@ -20,6 +20,9 @@ While you work:
 - Make one change at a time. After each one, run `npm run check`, then `npm run dev`, and tell me what
   to look at on http://localhost:8787 (on a phone-sized window first, then a computer).
 - Keep the game working on phones: the thumbstick on the left, the camera on the right, the Jump button.
+- The player's character comes from the package @nano133/nanoterra (the character the player picked in Nanoterra). One switch picks it or the game's
+  own penguin: `"character": "nanoterra"` or `"own"` in `game.config.json`. Keep that switch in that one file. The body is display only: never give a body
+  a different collider, jump or reach.
 - Players sign in with Berry Wallet, NanChat or Nautilus. Keep all three.
 - Looks only change how the character looks. Every look shows its price. Never add random items, loot
   boxes or anything a player buys without knowing what it is.
