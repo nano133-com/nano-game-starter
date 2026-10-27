@@ -62,12 +62,21 @@ When your game is listed in Nanoterra, a player who is signed in at nano133.com 
 player agrees once, on a card, to send their username, their Nano address and their character to your game. Nothing is sent
 otherwise, and a player can turn it off for your game at any time.
 
-How it works: the browser carries only a one-time code (60 seconds, used once) to `/nanoterra/callback`. Your Worker trades
-the code for the player's details with a call from the server, using your client id and your client secret. It then shows a
-screen: **Sign in as <name>? Continue / Not me**. Only a press of **Continue** makes your game's own session for that address.
-The screen is there because anyone can send a link that holds their own code: without it, a player who opened that link would be
-signed in as the sender. The secret never goes to a page. (The one-time code is in the address of that first request, so your
-Worker's request log may hold it. It is already used by then: it works once.)
+How it works (the standard OAuth shape, with a state):
+
+1. Nanoterra's Play key sends the player to `/nanoterra/start`. Your Worker makes a random **state**, keeps it in a cookie of that
+   browser (10 minutes) and sends the browser to nano133.com with your client id and the state.
+2. Nanoterra checks that the player is signed in, an adult, and agreed to play your game. It makes a one-time code (60 seconds, used
+   once) **for that state** and sends the browser back to `/nanoterra/callback?code=...&state=...`.
+3. The callback accepts the link **only when the state in it is the state in this browser's cookie**. A link that someone else made has a
+   state that is not in the victim's cookie, so it is refused before anything is traded. A state works once.
+4. Your Worker trades the code for the player's details with a call from the server, using your client id, your client secret and the
+   state. It then shows a screen: **Sign in as <name>? Continue / Not me**. Only a press of **Continue** makes your game's own session
+   for that address. (The screen is a second defence: it also stops a player who presses Continue by mistake from landing in a
+   stranger's account without seeing the name.)
+
+The secret never goes to a page. (The one-time code is in the address of the callback request, so your Worker's request log may hold it.
+It is already used by then: it works once.)
 
 To switch it on:
 
@@ -75,7 +84,8 @@ To switch it on:
    shows the client id and the secret **once**. Save them now: Nanoterra keeps only a one-way code.
 2. Put the client id in `NANOTERRA_CLIENT_ID` (`wrangler.jsonc`, or the dashboard). Add the secret with
    `npx wrangler secret put NANOTERRA_SECRET` (never in a file you commit).
-3. Keep `"signin": "exchange"` in `game.config.json`. Deploy. Nanoterra's check then tries your callback with a bad code and expects a clean refusal.
+3. Keep `"signin": "exchange"` in `game.config.json`. Deploy. Nanoterra's check then tries your callback with a bad code (it must be refused) and
+   reads your start route (it must set a cookie and redirect to nano133.com's authorize address with your client id and a state).
 
 What a player signed in from Nanoterra gets here: a session for the address Nanoterra named. It can show the player's name,
 own looks and order looks like any signed-in player. It **never opens `/admin`**: only a wallet signature does.
@@ -92,9 +102,10 @@ the player's character alone. The body is display only: the collider, the jump a
 for the little penguin of `character.ts` (or for a character of your own). The Nanoterra cosmetics that the player owns come with the sign-in
 (`nanoterraItems` in `/api/me`) but are not drawn: the package draws the body only (a later version adds the item art).
 
-**Be honest about whose account it is.** Anyone can send a victim's browser to a callback link that holds the attacker's own
-code within its 60 seconds. This starter therefore asks first ("Sign in as <name>? Continue / Not me") and signs nobody in without that
-press. Keep the signed-in name on the first screen (the account button does), and before any payment make clear whose account it is.
+**Be honest about whose account it is.** The state and the confirm screen close the old hole (a link that signs a victim in as the
+sender). Still show the signed-in name on the first screen (this starter does, in the account button), and before any payment make clear
+whose account it is. If you write your own game's server instead of using this starter, keep the state in a cookie and compare it at the
+callback: that comparison is what protects your players.
 
 Use the details only to sign the player in to your game (Nanoterra's Terms). Your own records of them are yours to protect; Nanoterra
 cannot delete them for the player.

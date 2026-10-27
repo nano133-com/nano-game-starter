@@ -6,7 +6,7 @@ import { baseRecord, packRecord, unpackRecord } from "@nano133/nanoterra/charact
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ADMIN_SESSION_MS } from "../src/worker/admin";
 import type { Env } from "../src/worker/env";
-import { bindOf, callback, cancel, confirm, exchangeCode, pendingToken, readPlayer } from "../src/worker/nanoterra";
+import { bindOf, callback, cancel, confirm, exchangeCode, pendingToken, readPlayer, start } from "../src/worker/nanoterra";
 import { Browser, ORIGIN } from "./api";
 import { makeDb, testAccount } from "./helpers";
 
@@ -33,8 +33,17 @@ const nanoterra = (status: number, body: unknown, calls: Call[] = []) =>
     calls.push({ url: String(url), init });
     return new Response(typeof body === "string" ? body : JSON.stringify(body), { status });
   }) as unknown as typeof fetch;
-const visit = (code: string | null, e: Env = env, ip = "203.0.113.9", fetcher?: typeof fetch) =>
-  callback(e, new Request(`${ORIGIN}/nanoterra/callback${code === null ? "" : `?code=${code}`}`, { headers: { "CF-Connecting-IP": ip } }), ip, Date.now(), fetcher);
+/** The state this browser started with: in its cookie, and in the link that Nanoterra's redirect gives the callback. */
+const STATE = "s".repeat(32);
+/** The callback as a browser opens it: `state` is the link's state and `cookie` the browser's (the same by default; null leaves it out). */
+const visit = (code: string | null, e: Env = env, ip = "203.0.113.9", fetcher?: typeof fetch, o: { state?: string | null; cookie?: string | null } = {}) => {
+  const state = o.state === undefined ? STATE : o.state;
+  const cookie = o.cookie === undefined ? STATE : o.cookie;
+  const query = [code === null ? "" : `code=${code}`, state === null ? "" : `state=${state}`].filter(Boolean).join("&");
+  const headers = new Headers({ "CF-Connecting-IP": ip });
+  if (cookie !== null) headers.set("Cookie", `nanoterra-state=${cookie}`);
+  return callback(e, new Request(`${ORIGIN}/nanoterra/callback${query ? `?${query}` : ""}`, { headers }), ip, Date.now(), fetcher);
+};
 const sessionsOf = async (address: string) => (await env.DB.prepare("SELECT via FROM sessions WHERE address = ?").bind(address).all<{ via: string }>()).results;
 const sessionCount = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM sessions").first<{ n: number }>())!.n;
 /** The `name=value` pair of a cookie that a response sets, as a browser sends it back. */
@@ -79,16 +88,17 @@ describe("Sign in from Nanoterra", () => {
     const cookieToken = decodeURIComponent(res.headers.getSetCookie()[0]!.split(";")[0]!.slice("nanoterra-pending=".length));
     expect(bindIn(html)).toBe(await bindOf(cookieToken));
     expect(html).not.toContain(cookieToken);
-    // The only cookie is the one that waits for Continue: signed, 5 minutes, this site only, and no session cookie.
+    // The cookies: the one that waits for Continue (signed, 5 minutes, this site only), the state cookie dropped (a state works once), and no session cookie.
     const cookies = res.headers.getSetCookie();
-    expect(cookies).toHaveLength(1);
+    expect(cookies).toHaveLength(2);
     expect(cookies[0]).toMatch(/^nanoterra-pending=[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+; Path=\/; Max-Age=300; HttpOnly; SameSite=Lax/);
+    expect(cookies[1]).toBe("nanoterra-state=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax");
     // One POST to Nanoterra's token endpoint, JSON, with the client id, the secret and the code; no redirect followed.
     expect(calls).toHaveLength(1);
     expect(calls[0]!.url).toBe("https://nano133.com/api/nanoterra/token");
     expect(calls[0]!.init.method).toBe("POST");
     expect(calls[0]!.init.redirect).toBe("manual");
-    expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ client_id: "ng_00000000000000000001", client_secret: SECRET, code: CODE });
+    expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ client_id: "ng_00000000000000000001", client_secret: SECRET, code: CODE, state: STATE });
     expect(await sessionsOf(player.address)).toEqual([]);
     const kept = await env.DB.prepare("SELECT username, look, items FROM nanoterra_players WHERE address = ?").bind(player.address).first<{ username: string; look: string; items: string }>();
     expect(kept).toMatchObject({ username: "Ann", look: JSON.stringify(LOOK), items: JSON.stringify(["hub.sun-hat"]) });
@@ -171,7 +181,7 @@ describe("Sign in from Nanoterra", () => {
     for (const [name, fetcher] of refusals) {
       const res = await visit(CODE, env, `203.0.113.${20 + refusals.findIndex(([n]) => n === name)}`, fetcher);
       expect(res.status, name).toBe(400);
-      expect(res.headers.getSetCookie(), name).toEqual([]);
+      expect(res.headers.getSetCookie().every((c) => c.startsWith("nanoterra-state=; ")), name).toBe(true);
     }
     expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM sessions").first<{ n: number }>())!.n).toBe(before);
   });
@@ -369,6 +379,98 @@ describe("Sign in from Nanoterra", () => {
       const p = await playerOf(env.DB, mine.address);
       expect(p!.record).toBeNull();
       expect(p!.look).toEqual(LOOK);
+    });
+  });
+
+  // ---- The state: the login CSRF defence ---------------------------------------------------------------------------------------------
+  describe("the state", () => {
+    const stateOf = (res: Response) => /^nanoterra-state=([0-9a-f]{32});/.exec(res.headers.getSetCookie()[0] ?? "")?.[1];
+    const begin = (e: Env = env, ip = "203.0.113.60", method = "GET") => start(e, new Request(`${ORIGIN}/nanoterra/start`, { method, headers: { "CF-Connecting-IP": ip } }), ip);
+
+    it("the start route keeps a new state in a cookie of this browser and goes to Nanoterra's authorize address with the client id and that state", async () => {
+      const res = await begin(env, "203.0.113.61");
+      expect(res.status).toBe(302);
+      const state = stateOf(res);
+      expect(state).toMatch(/^[0-9a-f]{32}$/);
+      const to = new URL(res.headers.get("Location")!);
+      expect(`${to.origin}${to.pathname}`).toBe("https://nano133.com/api/nanoterra/authorize");
+      expect(to.searchParams.get("client_id")).toBe("ng_00000000000000000001");
+      expect(to.searchParams.get("state")).toBe(state);
+      expect([...to.searchParams.keys()].sort()).toEqual(["client_id", "state"]);
+      expect(res.headers.getSetCookie()).toEqual([`nanoterra-state=${state}; Path=/; Max-Age=600; HttpOnly; SameSite=Lax`]);
+      expect(res.headers.get("Cache-Control")).toBe("no-store");
+      expect(res.headers.get("Referrer-Policy")).toBe("no-referrer");
+      expect(`${res.headers.get("Location")}${res.headers.get("Set-Cookie")}`).not.toContain(SECRET);
+      expect(stateOf(await begin(env, "203.0.113.62"))).not.toBe(state);
+    });
+
+    it("the start route is off until set up, takes only GET, and gives an address 20 starts a minute", async () => {
+      expect((await begin({ ...env, NANOTERRA_SECRET: undefined } as Env, "203.0.113.63")).status).toBe(503);
+      expect((await begin(env, "203.0.113.63", "POST")).status).toBe(405);
+      let last = 0;
+      for (let i = 0; i < 22 && last !== 429; i++) last = (await begin(env, "203.0.113.64")).status;
+      expect(last).toBe(429);
+    });
+
+    it("the whole flow: start, Nanoterra's redirect with the code and the same state, the confirm screen, Continue: a session", async () => {
+      const started = await begin(env, "203.0.113.65");
+      const state = stateOf(started)!;
+      const calls: Call[] = [];
+      const shown = await visit(CODE, env, "203.0.113.65", nanoterra(200, answerOf(), calls), { state, cookie: state });
+      expect(shown.status).toBe(200);
+      expect(JSON.parse(String(calls[0]!.init.body)).state).toBe(state);
+      expect(shown.headers.getSetCookie().some((c) => c.startsWith("nanoterra-state=; "))).toBe(true);
+      const done = await press("confirm", pairOf(shown, "nanoterra-pending"), { ip: "203.0.113.65", bind: bindIn(await shown.text()) });
+      expect(done.status).toBe(303);
+      expect(pairOf(done, "session")).toMatch(/^session=[0-9a-f]{64}$/);
+    });
+
+    it("a link without a state, or with one that is not in this browser's cookie, trades nothing: this is login CSRF", async () => {
+      const calls: Call[] = [];
+      const fetcher = nanoterra(200, answerOf(), calls);
+      const before = await sessionCount();
+      const attacker = "a".repeat(32);
+      const victim = "b".repeat(32);
+      const cases: [string, { state?: string | null; cookie?: string | null }][] = [
+        ["no state in the link", { state: null }],
+        ["no state cookie in this browser (the attacker's link, opened by a victim who never pressed Play here)", { state: attacker, cookie: null }],
+        ["another state in this browser's cookie (the victim started once, the link is the attacker's)", { state: attacker, cookie: victim }],
+        ["a state of the wrong shape in the link", { state: "short", cookie: "short" }],
+        ["a state of the wrong shape in the cookie", { state: attacker, cookie: "x".repeat(200) }],
+        ["an empty state", { state: "", cookie: "" }],
+        ["a state that differs in its last character", { state: `${"c".repeat(31)}d`, cookie: "c".repeat(32) }],
+      ];
+      for (const [name, o] of cases) {
+        const res = await visit(CODE, env, `203.0.113.${70 + cases.findIndex(([n]) => n === name)}`, fetcher, o);
+        expect(res.status, name).toBe(400);
+        expect(await res.text(), name).toContain("did not start in this browser");
+        expect(res.headers.getSetCookie().filter((c) => !c.startsWith("nanoterra-state=; ")), name).toEqual([]);
+      }
+      expect(calls).toHaveLength(0);
+      expect(await sessionCount()).toBe(before);
+    });
+
+    it("a state works once: the answer drops the cookie, so the same link opened again is refused", async () => {
+      const state = stateOf(await begin(env, "203.0.113.80"))!;
+      const calls: Call[] = [];
+      const first = await visit(CODE, env, "203.0.113.80", nanoterra(200, answerOf(), calls), { state, cookie: state });
+      expect(first.status).toBe(200);
+      // The browser has dropped the cookie (Max-Age=0): the same link again has no cookie to match.
+      const again = await visit(CODE, env, "203.0.113.80", nanoterra(200, answerOf(), calls), { state, cookie: null });
+      expect(again.status).toBe(400);
+      expect(calls).toHaveLength(1);
+      // A refused exchange drops it too.
+      const state2 = stateOf(await begin(env, "203.0.113.81"))!;
+      const refused = await visit(CODE, env, "203.0.113.81", nanoterra(400, { error: "invalid" }), { state: state2, cookie: state2 });
+      expect(refused.status).toBe(400);
+      expect(refused.headers.getSetCookie()).toEqual(["nanoterra-state=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"]);
+    });
+
+    it("the state goes to Nanoterra with the code and the secret, and exchangeCode needs it", async () => {
+      const calls: Call[] = [];
+      const state = "d".repeat(32);
+      expect(await exchangeCode(env, CODE, state, nanoterra(200, answerOf(), calls))).not.toBeNull();
+      expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ client_id: "ng_00000000000000000001", client_secret: SECRET, code: CODE, state });
     });
   });
 });

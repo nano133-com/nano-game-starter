@@ -102,8 +102,11 @@ the risk first, then change it only with tests in `test/` that show the new rule
 8. **Secrets** (`NODE_API_KEY`, `TURNSTILE_SECRET`, `NANOTERRA_SECRET`): only in Cloudflare secrets or `.dev.vars`.
    Never in code, `wrangler.jsonc`, a commit, a log or a message. Never add a seed or a private key to
    this project: the game must stay watch-only.
-9. **Sign in from Nanoterra** (`src/worker/nanoterra.ts`, the `via` column of `sessions`): the one-time code is traded for the
-   player's details by a call from the Worker, with the client secret; the answer is read strictly. The callback makes NO session:
+9. **Sign in from Nanoterra** (`src/worker/nanoterra.ts`, the `via` column of `sessions`): `/nanoterra/start` makes a STATE and keeps it in a cookie
+   of this browser (`nanoterra-state`, HttpOnly, SameSite=Lax, 10 minutes), then goes to nano133.com's authorize address with the client id and the
+   state; the callback accepts `?state=` ONLY when it equals that cookie (compared in constant time, both of the right shape) and drops the cookie in
+   every answer after that (a state works once): this is the login CSRF defence, never loosen it or trade a code first. The one-time code is
+   traded for the player's details by a call from the Worker, with the client secret and the state; the answer is read strictly. The callback makes NO session:
    it shows "Sign in as <name>? Continue / Not me" and sets a signed pending cookie (5 minutes, SameSite=Lax). Only
    `POST /nanoterra/confirm` makes the session, and only with that cookie, an Origin of this game and the `bind` field of the screen
    (a hash of the cookie's token: a second callback in the same browser cannot ride a press on the old screen); a pending cookie works

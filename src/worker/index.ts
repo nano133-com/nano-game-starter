@@ -8,7 +8,7 @@ import { lookById } from "../shared/looks";
 import { adminGuard, adminSummary } from "./admin";
 import { receiveAddress, setting, testMode, turnstileOn, type Env } from "./env";
 import { fail, json, readJson, sameOrigin, secure, visitorIp } from "./http";
-import { callback as nanoterraCallback, cancel as nanoterraCancel, confirm as nanoterraConfirm, playerOf } from "./nanoterra";
+import { callback as nanoterraCallback, cancel as nanoterraCancel, confirm as nanoterraConfirm, playerOf, start as nanoterraStart } from "./nanoterra";
 import { Busy, MAX_OPEN_PER_PLAYER, orderById, orderView, reserve, type OrderRow } from "./orders";
 import { PRICE_FEEDS, usdPerXno } from "./price";
 import { d1Limit, LIMITS, memoryLimit, visitorKey } from "./ratelimit";
@@ -34,7 +34,7 @@ export function listing(env: Env, req: Request) {
     multiplayer: CONFIG.multiplayer,
     regions: CONFIG.regions,
     ages: CONFIG.ages,
-    // How this game signs a Nanoterra player in ("exchange": /nanoterra/callback trades a one-time code for the player's details).
+    // How this game signs a Nanoterra player in ("exchange": /nanoterra/start keeps a state and /nanoterra/callback trades a one-time code for the player's details).
     signin: CONFIG.signin,
     // The character is NOT here: its one switch is "character" in game.config.json ("nanoterra" or "own"), and only the game's own code reads it.
   };
@@ -196,6 +196,7 @@ export default {
       if (path === "/nano-game.json" && (req.method === "GET" || req.method === "HEAD")) {
         return secure(json(listing(env, req), 200, { "Cache-Control": "public, max-age=300" }), false);
       }
+      if (path === "/nanoterra/start") return secure(nanoterraStart(env, req, visitorIp(req)), false);
       if (path === "/nanoterra/callback") return secure(await nanoterraCallback(env, req, visitorIp(req)), false);
       if (path === "/nanoterra/confirm") return secure(await nanoterraConfirm(env, req, visitorIp(req)), false);
       if (path === "/nanoterra/cancel") return secure(await nanoterraCancel(env, req), false);

@@ -1,7 +1,11 @@
 // Sign in from Nanoterra (README, "Sign in from Nanoterra"). A player who is signed in at nano133.com and agreed on its card
-// presses Play and arrives at GET /nanoterra/callback?code=... on THIS site. The browser carries only that one-time code (60
-// seconds, used once). This Worker trades it for the player's details with a call from the server, with its client id and its
-// client secret (NANOTERRA_SECRET), and makes its own session for the address that Nanoterra named.
+// presses Play and arrives at GET /nanoterra/start on THIS site. The start route makes a STATE (random text), keeps it in a cookie of
+// THIS browser and sends the browser to nano133.com's authorize address with the client id and the state. Nanoterra answers with a
+// redirect to GET /nanoterra/callback?code=...&state=... (the code is good for 60 seconds, once, and was made for that state). The
+// callback accepts the state ONLY when it equals this browser's cookie: a link that someone else made carries a state that is not in
+// the victim's cookie, so it is refused before anything is traded (login CSRF). The Worker then trades the code for the player's
+// details with a call from the server, with its client id, its client secret (NANOTERRA_SECRET) and the state, and makes its own
+// session for the address that Nanoterra named. The state cookie works once: every answer of the callback after the state matched drops it.
 //
 // The callback does NOT sign the player in by itself. Anyone can send a victim a callback link that holds the attacker's own
 // code, and a victim who opens it would land signed in as the attacker (login CSRF). So the callback only shows a screen:
@@ -29,6 +33,11 @@ const LOOK_PARTS = ["skin", "hair", "shirt", "pants", "shoes"] as const;
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const ANSWER_MAX = 4096;
 const CALLBACK_LIMIT = { limit: 20, windowMs: 60_000 };
+/** The cookie that holds the state this browser started with, and how long the player has to come back (10 minutes). */
+const STATE_COOKIE = "nanoterra-state";
+const STATE_SECONDS = 600;
+/** A state is random text of our own making, or the same shape from Nanoterra's redirect: 16 to 128 letters, digits, "-" or "_". */
+const STATE = /^[A-Za-z0-9_-]{16,128}$/;
 /** The cookie that waits for the player's Continue, and how long it lives (the player has 5 minutes to press it). */
 const PENDING_COOKIE = "nanoterra-pending";
 const PENDING_SECONDS = 300;
@@ -71,13 +80,13 @@ export function packedOf(record: unknown): PackedRecord | null {
 }
 
 /** Trades the code for the player's details: one call from this server. Null for every refusal and every fault. */
-export async function exchangeCode(env: Env, code: string, fetcher: typeof fetch = fetch): Promise<Player | null> {
+export async function exchangeCode(env: Env, code: string, state: string, fetcher: typeof fetch = fetch): Promise<Player | null> {
   const origin = setting(env.NANOTERRA_ORIGIN) ?? NANOTERRA;
   try {
     const res = await fetcher(`${origin}/api/nanoterra/token`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ client_id: setting(env.NANOTERRA_CLIENT_ID), client_secret: setting(env.NANOTERRA_SECRET), code }),
+      body: JSON.stringify({ client_id: setting(env.NANOTERRA_CLIENT_ID), client_secret: setting(env.NANOTERRA_SECRET), code, state }),
       redirect: "manual",
       signal: AbortSignal.timeout(5000),
     });
@@ -95,9 +104,37 @@ export async function exchangeCode(env: Env, code: string, fetcher: typeof fetch
 }
 
 /** A plain page for a sign-in that did not work, with a way into the game as a guest. */
-function page(status: number, title: string, words: string): Response {
+function page(status: number, title: string, words: string, cookies: string[] = []): Response {
   const html = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/nanoterra.css"><title>${title}</title><h1>${title}</h1><p>${words}</p><p><a href="/">Play as a guest</a></p>`;
-  return new Response(html, { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } });
+  const headers = new Headers({ "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" });
+  for (const c of cookies) headers.append("Set-Cookie", c);
+  return new Response(html, { status, headers });
+}
+
+/** True when the two texts are the same: their hashes are compared with no early exit, so the time says nothing about where they differ. */
+async function sameText(a: string, b: string): Promise<boolean> {
+  const [x, y] = await Promise.all([sha256Hex(a), sha256Hex(b)]);
+  let diff = 0;
+  for (let i = 0; i < x.length; i++) diff |= x.charCodeAt(i) ^ y.charCodeAt(i);
+  return diff === 0;
+}
+
+/**
+ * GET /nanoterra/start: where Nanoterra's Play key sends the player. It makes a STATE, keeps it in a cookie of THIS browser (HttpOnly,
+ * SameSite=Lax, 10 minutes) and redirects to nano133.com's authorize address with the client id and the state. A new start in this
+ * browser replaces the cookie, and only the last state can come back.
+ */
+export function start(env: Env, req: Request, ip: string, now = Date.now()): Response {
+  if (req.method !== "GET") return json({ error: "Not allowed." }, 405, { Allow: "GET" });
+  if (!nanoterraOn(env)) return page(503, "Nanoterra sign-in is not set up", "This game has not finished setting up sign-in from Nanoterra yet.");
+  if (!memoryLimit(`nanoterra-start|${ip}`, CALLBACK_LIMIT.limit, CALLBACK_LIMIT.windowMs, now)) return page(429, "Too many tries", "Wait a minute, then press Play in Nanoterra again.");
+  const state = randomHex(16);
+  const to = new URL("/api/nanoterra/authorize", setting(env.NANOTERRA_ORIGIN) ?? NANOTERRA);
+  to.searchParams.set("client_id", setting(env.NANOTERRA_CLIENT_ID)!);
+  to.searchParams.set("state", state);
+  const headers = new Headers({ Location: to.toString(), "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" });
+  headers.append("Set-Cookie", setCookie(req, STATE_COOKIE, state, STATE_SECONDS));
+  return new Response(null, { status: 302, headers });
 }
 
 const b64url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -148,6 +185,8 @@ async function confirmPage(req: Request, player: Player, token: string): Promise
   // the player's own press. Another site still gets no Referer from this page, and its own POST here still carries its own Origin.
   const headers = new Headers({ "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Referrer-Policy": "same-origin" });
   headers.append("Set-Cookie", setCookie(req, PENDING_COOKIE, token, PENDING_SECONDS));
+  // The state has done its work: it works once.
+  headers.append("Set-Cookie", setCookie(req, STATE_COOKIE, "", 0));
   return new Response(html, { status: 200, headers });
 }
 
@@ -160,10 +199,17 @@ export async function callback(env: Env, req: Request, ip: string, now = Date.no
   if (req.method !== "GET") return json({ error: "Not allowed." }, 405, { Allow: "GET" });
   if (!nanoterraOn(env)) return page(503, "Nanoterra sign-in is not set up", "This game has not finished setting up sign-in from Nanoterra yet.");
   if (!memoryLimit(`nanoterra|${ip}`, CALLBACK_LIMIT.limit, CALLBACK_LIMIT.windowMs, now)) return page(429, "Too many tries", "Wait a minute, then press Play in Nanoterra again.");
-  const code = new URL(req.url).searchParams.get("code") ?? "";
+  const params = new URL(req.url).searchParams;
+  const code = params.get("code") ?? "";
   if (!CODE.test(code)) return page(400, "That sign-in did not work", "The sign-in code is missing or not valid. Press Play in Nanoterra again.");
-  const player = await exchangeCode(env, code, fetcher);
-  if (!player) return page(400, "That sign-in did not work", "The sign-in code was refused or has run out. Press Play in Nanoterra again.");
+  // The state of the link must be the state THIS browser started with (its cookie). A link that someone else made has a state that is not in this
+  // browser's cookie, and nothing is traded for it. The cookie is dropped in every answer from here on: a state works once.
+  const state = params.get("state") ?? "";
+  const kept = readCookie(req, STATE_COOKIE) ?? "";
+  const clear = [setCookie(req, STATE_COOKIE, "", 0)];
+  if (!STATE.test(state) || !STATE.test(kept) || !(await sameText(state, kept))) return page(400, "That sign-in did not start here", "It did not start in this browser, or it started more than 10 minutes ago. Press Play in Nanoterra again.", clear);
+  const player = await exchangeCode(env, code, state, fetcher);
+  if (!player) return page(400, "That sign-in did not work", "The sign-in code was refused or has run out. Press Play in Nanoterra again.", clear);
   // What Nanoterra says about this address is kept now (it is that address's own data, and the exchange proved the code and the secret).
   await env.DB.prepare(
     "INSERT INTO nanoterra_players (address, username, look, record, items, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(address) DO UPDATE SET username = excluded.username, look = excluded.look, record = excluded.record, items = excluded.items, updated_at = excluded.updated_at",
