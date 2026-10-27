@@ -5,6 +5,7 @@ import "./style.css";
 import "./admin.css";
 import { ApiError, get, post, type Config } from "./ui/api";
 import { h, shortAddress } from "./ui/dom";
+import { gameCard, type GameState } from "./gameSwitches";
 import { shelfView } from "./shelf";
 import { signInView } from "./ui/signin";
 
@@ -32,9 +33,24 @@ let shelf: ReturnType<typeof shelfView> | null = null;
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const when = (ms: number | null) => (ms ? new Date(ms).toLocaleString() : "");
 
+/** The "Game" card keeps its own state for the life of the page (a payment check redraws the rest, not this). */
+let game: HTMLElement | null = null;
+
+/** The card, made once. A fault in reading the two switches must not hide the orders: the card is left out and the rest still shows. */
+async function gameSection(): Promise<HTMLElement | null> {
+  if (game) return game;
+  try {
+    game = gameCard(await get<GameState>("/api/admin/game"));
+  } catch {
+    game = null;
+  }
+  return game;
+}
+
 async function load() {
   try {
     const s = await get<Summary>("/api/admin/summary");
+    await gameSection();
     gate.hidden = true;
     render(s);
   } catch (e) {
@@ -157,6 +173,7 @@ function render(s: Summary) {
 
   const parts: (Node | null)[] = [
     s.warnings.length ? h("section", { class: "admin-card warnings", role: "alert" }, h("h2", {}, "Check these"), h("ul", {}, ...s.warnings.map((w) => h("li", {}, w)))) : null,
+    game,
     h(
       "section",
       { class: "totals" },

@@ -111,6 +111,11 @@ function page(status: number, title: string, words: string, cookies: string[] = 
   return new Response(html, { status, headers });
 }
 
+/** The answer of start, callback and confirm while the creator has the sign-in switch of /admin off. */
+export function signinOff(): Response {
+  return page(503, "Sign-in from Nanoterra is off", "This game has turned off sign-in from Nanoterra. You can play as a guest.");
+}
+
 /** True when the two texts are the same: their hashes are compared with no early exit, so the time says nothing about where they differ. */
 async function sameText(a: string, b: string): Promise<boolean> {
   const [x, y] = await Promise.all([sha256Hex(a), sha256Hex(b)]);

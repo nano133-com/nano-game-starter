@@ -12,7 +12,8 @@ creator's address. The Worker holds **no key**: it only reads the Nano ledger to
 
 | Path | What |
 |---|---|
-| `game.config.json` | Name, one line, creator name, listing pictures, round length, and the one character switch (`"character"`). Safe to change. |
+| `game.config.json` | Name, one line, creator name, listing pictures, round length, and the defaults of the two switches (`"character"`, `"signin"`). Safe to change. |
+| `src/shared/gameSwitches.ts`, `src/worker/gameSettings.ts`, `src/client/gameSwitches.ts` | The "Game" card of `/admin`: two switches kept in the `meta` table (`setting:character`, `setting:signin`), read at run time. See "Rules for looks" (the Shelf never writes) and the admin guard below. |
 | `looks.json` | The looks: `id`, `name`, `priceUsd`, and `change` (`body` colour, optional `hat` and `hatColor`). Safe to change, with the rules below. |
 | `src/client/game/` | The game: `world.ts` (the level), `character.ts` (what a character does, and the penguin), `nanoterraCharacter.ts` (the Nanoterra character), `hat.ts`, `gems.ts`, `controls.ts`, `game.ts` (rules, speed, camera). Safe to change. |
 | `src/client/ui/`, `src/client/style.css` | The sheets (looks, sign-in, pay) and the look of the page. Change with care (see "Never change"). |
@@ -68,7 +69,9 @@ npm run check      # typecheck + tests + build: run it before every commit
   copy them. (The old check refused $0.07, $0.29 and $1.10: `wholeCents` fixes that.)
 - **The Shelf (`/admin`) never writes.** It edits a draft in the creator's browser and gives text to copy. Do not add a server call that
   changes `looks.json`, the database's looks or prices: an editor would give the server a new way to change data. A change of looks is a
-  change of the repository, pushed to GitHub.
+  change of the repository, pushed to GitHub. **The "Game" card is not the Shelf:** its two switches (`POST /api/admin/game`) write only the two
+  settings `setting:character` and `setting:signin`, behind the same admin guard; the route takes nothing else, and a test proves that a press changes no
+  other `meta` row, order or owned look. Keep it that way: never add a looks, price, order or address field to it.
 - `GITHUB_REPO` (a setting, `owner/name`) only makes the Shelf link to `looks.json`. It is not a secret and it gives the game no GitHub access.
 
 ## Never change (without the creator's clear yes, and new tests)
@@ -87,7 +90,7 @@ the risk first, then change it only with tests in `test/` that show the new rule
 4. **Test mode** (`src/worker/env.ts`, `src/client/ui/pay.ts`): without a real address, or with
    `TEST_MODE` on, a pay screen shows **TEST MODE: DO NOT PAY**, no QR code, no address and no wallet
    link. A payment to an address nobody holds the key for is lost for good.
-5. **The admin guard** (`src/worker/admin.ts`): only the creator's own `RECEIVE_ADDRESS`, signed in
+5. **The admin guard** (`src/worker/admin.ts`; `/api/admin/game` of the "Game" card is behind it too): only the creator's own `RECEIVE_ADDRESS`, signed in
    with Nano within the last day, can read `/api/admin/*`. **The admin login is its own cookie** (`admin`, made only by a wallet
    signature that `/admin` started, `scope: "admin"`; the game's is `session`): the guard reads only the admin cookie, so a login made for
    the game (a wallet, or Nanoterra) can never open `/admin`, and an admin login is not a player. Keep it that way.

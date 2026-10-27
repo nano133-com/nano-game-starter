@@ -344,3 +344,74 @@ select.shelf-input {
   -webkit-appearance: none;
   appearance: none;
 }
+
+/* The "Game" card: two switches (src/client/gameSwitches.ts). Each is a button of at least 44 px, on a phone first. */
+.game-card .switch-row {
+  display: grid;
+  gap: 6px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+}
+.game-card .switch-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.game-card .switch-title {
+  font: 700 16px/1.3 var(--font);
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+.game-card .switch-note {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 15px;
+  line-height: 1.45;
+  max-width: 60ch;
+}
+.game-card .switch-review {
+  margin: 4px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.switch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 96px;
+  min-height: 44px;
+  padding: 0 6px 0 14px;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font: 700 14px/1 var(--font);
+  cursor: pointer;
+}
+.switch .switch-knob {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--line);
+}
+.switch.switch-on {
+  border-color: var(--gem-dark);
+  background: var(--gem);
+  color: #052b23;
+  flex-direction: row-reverse;
+  padding: 0 14px 0 6px;
+}
+.switch.switch-on .switch-knob {
+  background: var(--paper);
+}
+.switch:focus-visible {
+  outline: 3px solid var(--sea);
+  outline-offset: 2px;
+}
+.switch:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}

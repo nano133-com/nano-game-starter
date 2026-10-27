@@ -4,11 +4,13 @@
 import { nautilusReply } from "@nano133/signin";
 import { nanoUri, priceRaw, xnoText } from "../shared/amount";
 import { CONFIG } from "../shared/config";
+import { parsePatch, signinOn, type GameSettings, type Signin } from "../shared/gameSwitches";
 import { lookById } from "../shared/looks";
 import { adminGuard, adminSummary } from "./admin";
 import { receiveAddress, setting, testMode, turnstileOn, type Env } from "./env";
+import { readGameSettings, saveGameSettings } from "./gameSettings";
 import { fail, json, readJson, sameOrigin, secure, visitorIp } from "./http";
-import { callback as nanoterraCallback, cancel as nanoterraCancel, confirm as nanoterraConfirm, playerOf, start as nanoterraStart } from "./nanoterra";
+import { callback as nanoterraCallback, cancel as nanoterraCancel, confirm as nanoterraConfirm, playerOf, signinOff, start as nanoterraStart } from "./nanoterra";
 import { Busy, MAX_OPEN_PER_PLAYER, orderById, orderView, reserve, type OrderRow } from "./orders";
 import { PRICE_FEEDS, usdPerXno } from "./price";
 import { d1Limit, LIMITS, memoryLimit, visitorKey } from "./ratelimit";
@@ -21,8 +23,24 @@ if (!warm) console.warn("the signature warm-up check failed");
 
 export { sweep };
 
-/** The listing that Nano Island reads. It never lists looks or prices: the sale is the creator's own. */
-export function listing(env: Env, req: Request) {
+/**
+ * The settings now: the two switches of /admin ("Game" card), or game.config.json's words when /admin has set none. A database fault gives
+ * the defaults: the listing and the game's page must not break because a setting could not be read.
+ */
+async function settingsOf(env: Env): Promise<GameSettings> {
+  try {
+    const { character, signin } = await readGameSettings(env.DB);
+    return { character, signin };
+  } catch {
+    return { character: CONFIG.character, signin: CONFIG.signin };
+  }
+}
+
+/**
+ * The listing that Nano Island reads. It never lists looks or prices: the sale is the creator's own. `signin` is the switch of /admin (or
+ * game.config.json's word): the listing file says how the game signs a Nanoterra player in.
+ */
+export function listing(env: Env, req: Request, signin: Signin = CONFIG.signin) {
   const origin = new URL(req.url).origin;
   return {
     nanoGame: 1,
@@ -35,8 +53,8 @@ export function listing(env: Env, req: Request) {
     regions: CONFIG.regions,
     ages: CONFIG.ages,
     // How this game signs a Nanoterra player in ("exchange": /nanoterra/start keeps a state and /nanoterra/callback trades a one-time code for the player's details).
-    signin: CONFIG.signin,
-    // The character is NOT here: its one switch is "character" in game.config.json ("nanoterra" or "own"), and only the game's own code reads it.
+    signin,
+    // The character is NOT here: its switch is the "Game" card of /admin (or "character" in game.config.json, "nanoterra" or "own"), and only the game's own code reads it.
   };
 }
 
@@ -115,11 +133,15 @@ export async function handleApi(req: Request, env: Env, now = Date.now()): Promi
   if (method === "POST" && !sameOrigin(req)) return fail(403, "This call must come from the game's own page.");
 
   if (method === "GET" && path === "/api/config") {
+    const settings = await settingsOf(env);
     return json({
       name: CONFIG.name,
       creator: CONFIG.creator.name,
       testMode: testMode(env),
       turnstileSiteKey: turnstileOn(env) ? setting(env.TURNSTILE_SITE_KEY)! : null,
+      // The two switches of /admin: which character the players are (the game draws it), and whether sign-in from Nanoterra is on.
+      character: settings.character,
+      nanoterraSignin: signinOn(settings.signin),
     });
   }
 
@@ -170,6 +192,16 @@ export async function handleApi(req: Request, env: Env, now = Date.now()): Promi
     const refused = await adminGuard(env, req, now);
     return refused ?? json(await adminSummary(env, now));
   }
+  // The "Game" card: the two switches. The same guard as every /api/admin route, unchanged. A press changes only these two settings.
+  if (path === "/api/admin/game" && (method === "GET" || method === "POST")) {
+    const refused = await adminGuard(env, req, now);
+    if (refused) return refused;
+    if (method === "GET") return json(await readGameSettings(db));
+    if (!memoryLimit(`admin-game|${ip}`, 30, 60_000, now)) return fail(429, "Too many changes. Wait a minute.");
+    const parsed = parsePatch(await readJson(req, 512));
+    if (!parsed.ok) return fail(400, parsed.error);
+    return json(await saveGameSettings(db, parsed.patch, now));
+  }
   if (path === "/api/admin/check" && method === "POST") {
     const refused = await adminGuard(env, req, now);
     if (refused) return refused;
@@ -194,8 +226,11 @@ export default {
     const path = new URL(req.url).pathname;
     try {
       if (path === "/nano-game.json" && (req.method === "GET" || req.method === "HEAD")) {
-        return secure(json(listing(env, req), 200, { "Cache-Control": "public, max-age=300" }), false);
+        // 60 seconds, not 300: a switch of /admin shows in the listing within a minute.
+        return secure(json(listing(env, req, (await settingsOf(env)).signin), 200, { "Cache-Control": "public, max-age=60" }), false);
       }
+      // Sign-in from Nanoterra is a switch of /admin: while it is off, a link made before signs nobody in. ("Not me" always works.)
+      if ((path === "/nanoterra/start" || path === "/nanoterra/callback" || path === "/nanoterra/confirm") && !signinOn((await settingsOf(env)).signin)) return secure(signinOff(), false);
       if (path === "/nanoterra/start") return secure(nanoterraStart(env, req, visitorIp(req)), false);
       if (path === "/nanoterra/callback") return secure(await nanoterraCallback(env, req, visitorIp(req)), false);
       if (path === "/nanoterra/confirm") return secure(await nanoterraConfirm(env, req, visitorIp(req)), false);

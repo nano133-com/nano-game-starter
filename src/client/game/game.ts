@@ -37,7 +37,10 @@ export class Game {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
   readonly camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
-  readonly character: Avatar;
+  /** The player's character. `setCharacter` replaces it when the switch of /admin differs from the bundled word (game.config.json). */
+  character: Avatar;
+  private characterKind: "nanoterra" | "own" = CONFIG.character;
+  private readonly ramp: THREE.Texture;
   readonly controls: Controls;
   private readonly gems: Gems;
   private readonly colliders: Collider[];
@@ -74,6 +77,7 @@ export class Game {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, touch ? 1.75 : 2));
     view.appendChild(this.renderer.domElement);
     const ramp = toonRamp();
+    this.ramp = ramp;
     const world = buildWorld(this.scene, ramp);
     this.colliders = world.colliders;
     this.updateWorld = world.update;
@@ -96,6 +100,26 @@ export class Game {
 
   wear(look: Look) {
     this.character.wear(look);
+  }
+
+  /**
+   * The game's character for `kind` (the "Game" card of /admin, read from /api/config): the same one stays, or it is replaced. The new one is
+   * put where the old one stood; the caller dresses it (the shop's look and the Nanoterra character) as at the start.
+   */
+  setCharacter(kind: "nanoterra" | "own") {
+    if (kind === this.characterKind) return;
+    const old = this.character;
+    this.scene.remove(old.group, old.ground);
+    for (const node of [old.group, old.ground]) {
+      node.traverse((o) => {
+        const m = o as THREE.Mesh;
+        m.geometry?.dispose();
+        for (const mat of Array.isArray(m.material) ? m.material : m.material ? [m.material] : []) mat.dispose();
+      });
+    }
+    this.character = makeAvatar(this.ramp, kind);
+    this.characterKind = kind;
+    this.scene.add(this.character.group, this.character.ground);
   }
 
   /** The character that the player has in Nanoterra (they signed in from there), or null. */

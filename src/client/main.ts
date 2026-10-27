@@ -202,6 +202,8 @@ accountBtn.addEventListener("click", () => {
     // The game still plays without the server; buying waits until it answers.
   }
   $("test-flag").hidden = !config.testMode;
+  // The "Game" switches of /admin: which character the players are (the bundled word is the default until the server says).
+  if (config.character) game.setCharacter(config.character);
   renderAccount();
   dress();
 })();

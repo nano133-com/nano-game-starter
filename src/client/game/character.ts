@@ -29,8 +29,8 @@ export interface Avatar {
   animate(dt: number, motion: { speed: number; airborne: boolean; verticalSpeed: number }): void;
 }
 
-/** The character that game.config.json asks for. */
-export const makeAvatar = (ramp: THREE.Texture): Avatar => (CONFIG.character === "own" ? new Character(ramp) : new NanoterraCharacter(ramp));
+/** The character for `kind`: the switch of /admin ("Game" card), which starts as game.config.json's word. */
+export const makeAvatar = (ramp: THREE.Texture, kind: "nanoterra" | "own" = CONFIG.character): Avatar => (kind === "own" ? new Character(ramp) : new NanoterraCharacter(ramp));
 
 export class Character implements Avatar {
   readonly group = new THREE.Group();

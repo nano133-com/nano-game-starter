@@ -90,7 +90,16 @@ To switch it on:
 What a player signed in from Nanoterra gets here: a session for the address Nanoterra named. It can show the player's name,
 own looks and order looks like any signed-in player. It **never opens `/admin`**: only a wallet signature does.
 
-**The character.** One switch, in one file: `game.config.json` says `"character": "nanoterra"` (the default) or `"own"`. Nothing else reads it
+**Two switches in `/admin` (the "Game" card).** Open `/admin` and look at **Game**. It has two switches: **Players use their Nanoterra
+character** and **Players can sign in with Nanoterra**. A press saves at once: you push nothing and deploy nothing. They start from the words in
+`game.config.json` (`"character"` and `"signin"`), and a press in `/admin` wins; the Worker reads the choice at run time and keeps it in your own database
+(two rows of the `meta` table, `setting:character` and `setting:signin`). The card changes only these two settings, never a look, a price or an order.
+Turning sign-in off changes the `signin` word of your listing file (`/nano-game.json`, kept for 60 seconds) and makes the game refuse sign-in from
+Nanoterra (`/nanoterra/start`, the callback and Continue) at once, so a link made before signs nobody in. **For a game that is listed, Nanoterra's review
+decides what Nanoterra shows:** the sign-in word is part of your listing file, and a change to a listed game's file waits for that review. The card cannot
+see the review, so it says so and links to Nanoterra's launch page (step 6).
+
+**The character.** One switch, in one file (and now in `/admin`, as above): `game.config.json` says `"character": "nanoterra"` (the default) or `"own"`. Nothing else reads it
 (the listing file `nano-game.json` does not carry it). With `"nanoterra"` the player is the Nanoterra island character, drawn by the package
 [`@nano133/nanoterra`](https://www.npmjs.com/package/@nano133/nanoterra) (path `/character`: the same code that nano133.com's island draws with). A player who
 signed in from Nanoterra plays as the character they picked there: the base (a person, a round one, a bear, a bee, a robot or a pineapple), the face, the hair, the
