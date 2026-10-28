@@ -8,6 +8,7 @@ import { ApiError, get, post, type Config, type Me, type Order } from "./ui/api"
 import { h, shortAddress } from "./ui/dom";
 import { looksView } from "./ui/looks";
 import { payView } from "./ui/pay";
+import { nanoterraPlayerOf } from "./ui/player";
 import { Sheet } from "./ui/sheet";
 import { signInView } from "./ui/signin";
 import { personCheck } from "./ui/turnstile";
@@ -134,9 +135,9 @@ function renderAccount() {
   accountBtn.setAttribute("aria-label", me.address ? `Signed in as ${me.username ? `${me.username}, ${me.address}` : me.address}` : "Sign in with Nano");
 }
 
-/** The character in the look the player has in Nanoterra (a sign-in from there), and in the shop's look that they wear. */
+/** The character in the look the player has in Nanoterra (a sign-in from there, while sign-in from Nanoterra is On), and in the shop's look that they wear. */
 function dress() {
-  game.setNanoterra(me.via === "nanoterra" ? { look: me.look ?? null, record: me.record ?? null } : null);
+  game.setNanoterra(nanoterraPlayerOf(me, config));
   game.wear(wornLook());
 }
 
