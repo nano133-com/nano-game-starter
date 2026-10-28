@@ -3,7 +3,7 @@
 // and that every route the handler lists is behind the guard. The pure guard has its own tests in the package.
 
 import { adminConformance, adminStoreConformance, type ConformanceHost, type StoreHarness, type Who } from "@nano133/nanoterra/admin/conformance";
-import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { adminHandler, gameStore } from "../src/worker/admin";
 import { EXAMPLE_ADDRESS, type Env } from "../src/worker/env";
 import worker from "../src/worker/index";
@@ -36,8 +36,21 @@ async function cookieFor(who: Who): Promise<string | null> {
     case "game_login":
       // A login made for the game's PLAYERS (cookie `session`), the owner's own: it must NOT open the admin.
       return `session=${await createSession(db, owner.address, now, "wallet", "play")}`;
+    case "game_token_as_admin":
+      // The token of a login made for the game's players, put in the ADMIN cookie: the admin scope's hashed keys must not match it.
+      return `admin=${await createSession(db, owner.address, now, "wallet", "play")}`;
     case "nanoterra_login":
       return `admin=${await createSession(db, owner.address, now, "nanoterra", "admin")}`;
+    case "unknown_via_login":
+      // An admin-scope row whose login word is none that the game writes: it must never be read as a wallet login.
+      return `admin=${await createSession(db, owner.address, now, "ticket" as never, "admin")}`;
+    case "old_valid_row": {
+      // More than a day old by its creation time, but the row's own expiry is still in the future: only the guard's age check can refuse it.
+      const made = now - DAY - 60_000 - calls++;
+      const token = await createSession(db, owner.address, made, "wallet", "admin");
+      await db.prepare("UPDATE sessions SET expires_at = ? WHERE created_at = ?").bind(now + DAY, made).run();
+      return `admin=${token}`;
+    }
     case "other_wallet":
       return `admin=${await createSession(db, other.address, now, "wallet", "admin")}`;
     case "expired_login":
@@ -54,6 +67,14 @@ const host = (): ConformanceHost => {
     routes: routes.routes,
     basePath: routes.basePath,
     origin: ORIGIN,
+    // Routes under /api/admin that an older page, or a later change, might serve. The Worker sends every path under the base to the package's handler first.
+    otherRoutes: [
+      { method: "GET", path: "/api/admin/orders" },
+      { method: "GET", path: "/api/admin/" },
+      { method: "GET", path: "/api/admin/summary.json" },
+      { method: "POST", path: "/api/admin/debug" },
+      { method: "GET", path: "/api/admin/game/" },
+    ],
     async request(who, req) {
       // A different address for each call: the generic limit per address (120 a minute) must not be what refuses a request in this test.
       const headers = new Headers({ "CF-Connecting-IP": `198.51.100.${(calls++ % 250) + 1}`, ...req.headers });
@@ -94,4 +115,37 @@ describe("the package's store contract, run against this game's D1 store and its
     };
   };
   for (const c of adminStoreConformance(harness)) it(c.name, c.run);
+});
+
+describe("what a security read found in this game's wiring", () => {
+  const adminCookie = async (via: string, ageMs = 0) => `admin=${await createSession(db, owner.address, Date.now() - ageMs, via as never, "admin")}`;
+  const options = (path: string, cookie?: string) =>
+    worker.fetch(new Request(`${ORIGIN}${path}`, { method: "OPTIONS", headers: { "CF-Connecting-IP": "203.0.113.77", Origin: ORIGIN, "Access-Control-Request-Method": "POST", ...(cookie ? { Cookie: cookie } : {}) } }), live());
+
+  it("a preflight for the admin is not answered for a visitor: 401, and no CORS header; for the owner, 405", async () => {
+    for (const path of ["/api/admin/summary", "/api/admin/game", "/api/admin/check", "/api/admin/anything"]) {
+      const res = await options(path);
+      expect(res.status, path).toBe(401);
+      expect([...res.headers.keys()].some((k) => k.startsWith("access-control-")), path).toBe(false);
+      // The owner: 405 for a route that exists (it has no OPTIONS), 404 for a path that does not.
+      expect((await options(path, await adminCookie("wallet"))).status, path).toBe(path.endsWith("anything") ? 404 : 405);
+    }
+    // The game's own preflight is unchanged: its own origin gets 204, another origin 403.
+    const own = await options("/api/signin/start");
+    expect(own.status).toBe(204);
+    expect(own.headers.get("access-control-allow-origin")).toBe(ORIGIN);
+  });
+
+  it("a login word that the game does not write is never a wallet login: /admin refuses it, and /api/me says it is no admin", async () => {
+    for (const word of ["ticket", "", "Wallet", "WALLET ", "walle"]) {
+      const cookie = await adminCookie(word);
+      const res = await worker.fetch(new Request(`${ORIGIN}/api/admin/summary`, { headers: { "CF-Connecting-IP": "203.0.113.78", Cookie: cookie } }), live());
+      expect(res.status, JSON.stringify(word)).toBe(403);
+    }
+    // In the game's own scope too: such a row is not an admin, and not a Nanoterra player.
+    const play = `session=${await createSession(db, owner.address, Date.now(), "ticket" as never, "play")}`;
+    const me = await (await worker.fetch(new Request(`${ORIGIN}/api/me`, { headers: { "CF-Connecting-IP": "203.0.113.79", Cookie: play } }), live())).json<Record<string, unknown>>();
+    expect(me.admin).toBe(false);
+    expect(me.via).toBe("unknown");
+  });
 });
