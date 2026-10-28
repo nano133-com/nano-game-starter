@@ -68,7 +68,9 @@ The **Sign-ins** card of `/admin` lists the last 10 admin sign-ins (the time, th
 admin login in every browser, this one too (two presses). **What is kept, and for how long:** for each admin sign-in the game keeps the time, the country that Cloudflare's country header
 gave (two letters, or none) and a short browser name made from fixed lists. It keeps **no address, no IP address and no browser text**. A row is deleted after 30 days (when the next
 sign-in is written, and by the clean-up that runs every 10 minutes). The table is `admin_logins`, made by `migrations/0005_admin_logins.sql`, which also adds a `scope` column to `sessions`
-(`'admin'` for an admin login) so that "Sign out everywhere" ends the admin logins and no player's.
+(`'admin'` for an admin login) so that "Sign out everywhere" ends the admin logins and no player's. It also ends the admin requests that were started and not collected (a request that
+the owner signed a moment ago, or signs a moment later, makes no login), and the sign-in that collects a request writes the delivery and the session in ONE database batch, so a "Sign out
+everywhere" can never run between them.
 
 ## Sign in from Nanoterra
 

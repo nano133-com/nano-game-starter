@@ -38,7 +38,7 @@ export class Browser {
 }
 
 /** Where the wallet app's calls come from. A test that makes many sign-ins moves it, so the wallet route's limit (kept in memory, per visitor) does not stop it. */
-export const walletFrom = { ip: "198.51.100.9" };
+export const walletFrom: { ip: string; n?: number } = { ip: "198.51.100.9" };
 
 /** The wallet app: no cookies, no Origin. */
 export async function walletCall(env: Env, path: string, body?: unknown, now = Date.now()) {

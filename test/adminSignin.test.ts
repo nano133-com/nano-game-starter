@@ -387,3 +387,61 @@ describe("what the third security read found", () => {
     expect((await player.call(env, "/api/me")).body).toMatchObject({ address: null });
   });
 });
+
+describe("the delivery and the session are one batch (a fourth security read found a race between them)", () => {
+  /** The same Worker env, but with the database watched: `onBatch` runs once, just before the FIRST batch of two statements (the delivery and the session) is sent. */
+  const watched = (onBatch: () => Promise<void>) => {
+    const sizes: number[] = [];
+    let armed = true;
+    const DB = new Proxy(env.DB, {
+      get(target, key) {
+        if (key === "batch") {
+          return async (statements: D1PreparedStatement[]) => {
+            sizes.push(statements.length);
+            if (statements.length === 2 && armed) {
+              armed = false;
+              await onBatch();
+            }
+            return target.batch(statements);
+          };
+        }
+        const value = (target as any)[key];
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    }) as D1Database;
+    return { env: { ...env, DB } as Env, sizes };
+  };
+
+  for (const way of ["berry", "nautilus"] as const) {
+    it(`${way}: a Sign out everywhere that runs just before the delivery leaves no admin login (the delivery changes no row, so no session is written)`, async () => {
+      const pending = us();
+      const a = await start(pending, way, "admin");
+      await walletAnswer(env, way, a.body, owner); // signed, not yet collected
+      const other = await signedInWith(env, way, owner, "admin", us());
+      let ran = false;
+      const w = watched(async () => {
+        ran = true;
+        expect((await other.call(env, "/api/admin/signout-all", { method: "POST", body: {} })).status).toBe(200);
+      });
+      const got = await pending.call(w.env, "/api/signin/check", { body: { id: a.body.id, way, scope: "admin" } });
+      expect(ran, "the delivery and the session are not sent as one batch of two statements").toBe(true);
+      expect(got.body.status).not.toBe("signedin");
+      expect(pending.jar.has("admin")).toBe(false);
+      expect(await sessionCount()).toBe(0);
+    });
+
+    it(`${way}: with no race the one batch makes the login, and a second check makes none`, async () => {
+      const browser = us();
+      const a = await start(browser, way, "admin");
+      await walletAnswer(env, way, a.body, owner);
+      const w = watched(async () => {});
+      const got = await browser.call(w.env, "/api/signin/check", { body: { id: a.body.id, way, scope: "admin" } });
+      expect(got.body).toEqual({ status: "signedin", address: owner.address });
+      // The first batch is the delivery with its session; the second is the sign-in list's row.
+      expect(w.sizes[0]).toBe(2);
+      expect(await sessionCount()).toBe(1);
+      expect((await browser.call(w.env, "/api/signin/check", { body: { id: a.body.id, way, scope: "admin" } })).body).toEqual({ status: "used" });
+      expect(await sessionCount()).toBe(1);
+    });
+  }
+});

@@ -287,10 +287,15 @@ export async function checkSignin(db: D1Database, req: Request, id: unknown, way
   // An admin login is for the game's own address only. A wallet that is not it makes no admin login (and does not end the owner's, which is
   // in a cookie of its own), and the request stays unused. `owner` is RECEIVE_ADDRESS, or null when none is set.
   if (scope === "admin" && r.account !== owner) return json({ status: "not_owner", address: r.account });
-  // Deliver once: a second check of the same request makes no second session.
-  const once = await db.prepare("UPDATE signin_requests SET delivered = 1 WHERE id = ? AND way = ? AND delivered = 0 AND status = 'signedin' AND scope = ?").bind(r.key ?? id, way, want).run();
-  if (once.meta.changes !== 1) return json({ status: "used" });
-  const token = await createSession(db, r.account, nowMs, "wallet", scope);
+  // Deliver once: a second check of the same request makes no second session. The delivery and the session are ONE batch (one transaction), and the session is
+  // written only when the delivery changed a row. So "Sign out everywhere" cannot run between them: it either ends the request first (nothing is delivered, no session)
+  // or deletes the session after (the batch is done).
+  const { token, statement } = await sessionRow(db, r.account, nowMs, "wallet", scope, true);
+  const done = await db.batch([
+    db.prepare("UPDATE signin_requests SET delivered = 1 WHERE id = ? AND way = ? AND delivered = 0 AND status = 'signedin' AND scope = ?").bind(r.key ?? id, way, want),
+    statement,
+  ]);
+  if (done[0]?.meta.changes !== 1) return json({ status: "used" });
   // The admin's sign-in list: the time, the rough country and a short browser name of THIS browser (the one that started the request and now gets the login). Nothing else.
   if (scope === "admin") await recordAdminLogin(db, req, nowMs);
   return json({ status: "signedin", address: r.account }, 200, { "Set-Cookie": setCookie(req, SESSION_COOKIE[scope], token, lifeOf(scope) / 1000) });
@@ -304,12 +309,22 @@ export const lifeOf = (scope: Scope): number => (scope === "admin" ? ADMIN_SESSI
 
 /** `via` has no default: a caller says how the login was made, so a new caller can never make a "wallet" login by forgetting to say. */
 export async function createSession(db: D1Database, address: string, now: number, via: Via, scope: Scope = "play"): Promise<string> {
-  const token = randomHex(32);
-  await db
-    .prepare("INSERT INTO sessions (id_hash, address, created_at, expires_at, via, scope) VALUES (?, ?, ?, ?, ?, ?)")
-    .bind(await keyOf(token, scope), address, now, now + lifeOf(scope), via, scope)
-    .run();
+  const { token, statement } = await sessionRow(db, address, now, via, scope, false);
+  await statement.run();
   return token;
+}
+
+/**
+ * The token of a new session and the statement that writes it. With `afterChange` the row is written only if the statement before it, in the same batch, changed a row
+ * (`changes() = 1`): a delivery that lost its race writes no session.
+ */
+async function sessionRow(db: D1Database, address: string, now: number, via: Via, scope: Scope, afterChange: boolean): Promise<{ token: string; statement: D1PreparedStatement }> {
+  const token = randomHex(32);
+  const columns = "INSERT INTO sessions (id_hash, address, created_at, expires_at, via, scope)";
+  const statement = db
+    .prepare(afterChange ? `${columns} SELECT ?, ?, ?, ?, ?, ? WHERE changes() = 1` : `${columns} VALUES (?, ?, ?, ?, ?, ?)`)
+    .bind(await keyOf(token, scope), address, now, now + lifeOf(scope), via, scope);
+  return { token, statement };
 }
 
 /** `via` is "unknown" for a stored word that is neither: it is never read as a wallet login (the admin guard refuses it, as it refuses anything but "wallet"). */

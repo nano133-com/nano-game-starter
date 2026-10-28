@@ -8,7 +8,7 @@ import { adminHandler, gameStore } from "../src/worker/admin";
 import { EXAMPLE_ADDRESS, type Env } from "../src/worker/env";
 import worker from "../src/worker/index";
 import { createSession } from "../src/worker/signin";
-import { Browser, ORIGIN, signedInWith, walletAnswer } from "./api";
+import { Browser, ORIGIN, signedInWith, walletAnswer, walletFrom } from "./api";
 import { makeDb, testAccount } from "./helpers";
 
 let db: D1Database;
@@ -18,7 +18,7 @@ const other = testAccount();
 beforeAll(async () => ({ db, close } = await makeDb()));
 afterAll(() => close());
 beforeEach(async () => {
-  for (const t of ["orders", "owned", "sessions", "hits", "meta", "nanoterra_players", "admin_logins"]) await db.prepare(`DELETE FROM ${t}`).run();
+  for (const t of ["orders", "owned", "sessions", "hits", "meta", "nanoterra_players", "admin_logins", "signin_requests"]) await db.prepare(`DELETE FROM ${t}`).run();
   await db.prepare("INSERT INTO meta (key, value, at) VALUES ('rate', ?, ?)").bind(JSON.stringify({ usd: 1, sources: ["test"] }), Date.now()).run();
   await db.prepare("INSERT INTO meta (key, value, at) VALUES ('salt', 'abc', 1)").run();
 });
@@ -141,15 +141,24 @@ describe("the package's admin conformance suite, run against this game's own ses
 function signinHost(way: "berry" | "nautilus"): SigninHost {
   type Handle = { browser: Browser; start: { body: Record<string, any> }; scope: "game" | "admin" };
   const name = (s: "game" | "admin") => (s === "admin" ? "admin" : "play");
+  // The game's clock for this host: `advance` moves it, and every call after it (the wallet's and the browser's) is made at that time.
+  let offset = 0;
+  const at = () => Date.now() + offset;
+  let browsers = 0;
   return {
     async start(scope) {
-      const browser = new Browser(ORIGIN, { "CF-IPCountry": "US", "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36" });
+      // A new address for each browser and for each signature: the per-address limits (the wallet route's 30 a minute, the sign-in start's) must never be what refuses a call here.
+      const browser = new Browser(ORIGIN, { "CF-Connecting-IP": `203.0.113.${(browsers++ % 250) + 1}`, "CF-IPCountry": "US", "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36" });
       const start = await browser.call(live(), "/api/signin/start", { body: { way, scope: name(scope) } });
       expect(start.status).toBe(200);
       return { browser, start, scope } satisfies Handle;
     },
     async sign(h) {
-      await walletAnswer(live(), way, (h as Handle).start.body, owner);
+      walletFrom.ip = `198.51.100.${(walletFrom.n = ((walletFrom.n ?? 0) + 1) % 250) + 1}`;
+      const out = await walletAnswer(live(), way, (h as Handle).start.body, owner, at());
+      // Berry Wallet's accepted answer is 204 with no body, Nautilus's is 200 with status 0. Anything else is a refusal, and a refusal is a fault of the test, never a pass.
+      const accepted = way === "berry" ? out.status === 204 : out.status === 200 && out.body?.status === 0;
+      if (!accepted) throw new Error(`the wallet's signature was refused: ${out.status} ${JSON.stringify(out.body)}`);
     },
     async finish(h, as, credentials) {
       const { browser, start, scope } = h as Handle;
@@ -161,18 +170,23 @@ function signinHost(way: "berry" | "nautilus"): SigninHost {
         if (scope === "admin" && as === "game") b.jar.set("starter", `admin:${browser.jar.get("starter-admin")}`);
         if (scope === "game" && as === "admin") b.jar.set("starter-admin", browser.jar.get("starter")!);
       }
-      await b.call(live(), "/api/signin/check", { body: { id: start.body.id, way, scope: name(as) } });
+      b.headers = { "CF-Connecting-IP": `203.0.113.${(browsers++ % 250) + 1}` };
+      await b.call(live(), "/api/signin/check", { body: { id: start.body.id, way, scope: name(as) }, now: at() });
       return { admin: b.jar.has("admin"), game: b.jar.has("session") };
     },
     async signOutEverywhere() {
-      const admin = await signedInWith(live(), way, owner, "admin", new Browser(ORIGIN));
+      walletFrom.ip = `198.51.100.${(walletFrom.n = ((walletFrom.n ?? 0) + 1) % 250) + 1}`;
+      const admin = await signedInWith(live(), way, owner, "admin", new Browser(ORIGIN, { "CF-Connecting-IP": `203.0.113.${(browsers++ % 250) + 1}` }));
       expect((await admin.call(live(), "/api/admin/signout-all", { method: "POST", body: {} })).status).toBe(200);
+    },
+    async advance(ms) {
+      offset += ms;
     },
   };
 }
 
 describe("the kit's sign-in chain contract, run against this game's own sign-in (Berry Wallet, Nautilus)", () => {
-  for (const way of ["berry", "nautilus"] as const) for (const c of adminSigninConformance(signinHost(way))) it(`[${way}] ${c.name}`, c.run);
+  for (const way of ["berry", "nautilus"] as const) for (const c of adminSigninConformance(signinHost(way), { signOutEverywhere: true })) it(`[${way}] ${c.name}`, c.run);
 });
 
 describe("the same suite over https, where the cookies are __Host-session and __Host-admin", () => {
@@ -203,6 +217,17 @@ describe("the package's store contract, run against this game's D1 store and its
         const now = Date.now();
         for (let i = 0; i < n.admin; i++) await db.prepare("INSERT INTO sessions (id_hash, address, created_at, expires_at, via, scope) VALUES (?, ?, ?, ?, 'wallet', 'admin')").bind(`seed-admin-${i}-${now}`, owner.address, now, now + DAY).run();
         for (let i = 0; i < n.play; i++) await db.prepare("INSERT INTO sessions (id_hash, address, created_at, expires_at, via, scope) VALUES (?, ?, ?, ?, 'wallet', 'play')").bind(`seed-play-${i}-${now}`, owner.address, now, now + 30 * DAY).run();
+      },
+      async seedRequests(n) {
+        const at = Date.now();
+        for (let i = 0; i < n.admin + n.game; i++) {
+          const scope = i < n.admin ? "admin" : "play";
+          await db.prepare("INSERT INTO signin_requests (id, way, starter, status, expires_at, delivered, scope) VALUES (?, 'berry', 'seed', 'signedin', ?, 0, ?)").bind(`seed-req-${scope}-${i}-${at}`, at + 300_000, scope).run();
+        }
+      },
+      async pendingRequests() {
+        const n = async (scope: string) => (await db.prepare("SELECT COUNT(*) AS n FROM signin_requests WHERE scope = ? AND delivered = 0 AND id LIKE 'seed-req-%'").bind(scope).first<{ n: number }>())!.n;
+        return { admin: await n("admin"), game: await n("play") };
       },
       async sessionCounts() {
         const n = async (scope: string) => (await db.prepare("SELECT COUNT(*) AS n FROM sessions WHERE scope = ? AND id_hash LIKE 'seed-%'").bind(scope).first<{ n: number }>())!.n;
