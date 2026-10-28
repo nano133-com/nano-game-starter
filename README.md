@@ -57,6 +57,19 @@ nothing to GitHub. When you like the draft, press **Copy looks.json** and put th
 the admin panel, which comes from the package [`@nano133/nanoterra`](https://www.npmjs.com/package/@nano133/nanoterra) (path `/admin/panel`): the same `/admin` that any Three.js game can mount.
 This game only gives the panel what is its own: the owner address, the admin login, the looks and the wallet sign-in (`src/client/admin.ts`, `src/worker/admin.ts`).
 
+## Signing in to /admin
+
+Only a wallet signature opens `/admin`, and **what the wallet signs says so**, so that a link sent to you by a stranger does not look like any sign-in:
+Berry Wallet signs the page it signs in to (`URI: https://your-game/admin?from=US`: the admin, and the country the request started from) and Nautilus signs a label
+(`ADMIN of your-game sign-in ABCD-EFGH from US`, with a line that says when it started and "If you did not start this, do not sign"). **If you are asked to sign in to the admin and you did
+not start it yourself, do not sign.** An admin sign-in request lives 2 minutes and works once. NanChat is not offered for the admin (it cannot name the admin in what it signs).
+
+The **Sign-ins** card of `/admin` lists the last 10 admin sign-ins (the time, the rough country and a short browser name such as "Chrome on macOS"), and **Sign out everywhere** ends every
+admin login in every browser, this one too (two presses). **What is kept, and for how long:** for each admin sign-in the game keeps the time, the country that Cloudflare's country header
+gave (two letters, or none) and a short browser name made from fixed lists. It keeps **no address, no IP address and no browser text**. A row is deleted after 30 days (when the next
+sign-in is written, and by the clean-up that runs every 10 minutes). The table is `admin_logins`, made by `migrations/0005_admin_logins.sql`, which also adds a `scope` column to `sessions`
+(`'admin'` for an admin login) so that "Sign out everywhere" ends the admin logins and no player's.
+
 ## Sign in from Nanoterra
 
 When your game is listed in Nanoterra, a player who is signed in at nano133.com can press Play and arrive here signed in. The

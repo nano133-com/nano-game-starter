@@ -18,7 +18,7 @@ const other = testAccount();
 beforeAll(async () => ({ db, close } = await makeDb()));
 afterAll(() => close());
 beforeEach(async () => {
-  for (const t of ["orders", "owned", "sessions", "hits", "meta", "nanoterra_players"]) await db.prepare(`DELETE FROM ${t}`).run();
+  for (const t of ["orders", "owned", "sessions", "hits", "meta", "nanoterra_players", "admin_logins"]) await db.prepare(`DELETE FROM ${t}`).run();
   await db.prepare("INSERT INTO meta (key, value, at) VALUES ('rate', ?, ?)").bind(JSON.stringify({ usd: 1, sources: ["test"] }), Date.now()).run();
   await db.prepare("INSERT INTO meta (key, value, at) VALUES ('salt', 'abc', 1)").run();
 });
@@ -107,6 +107,18 @@ describe("the package's store contract, run against this game's D1 store and its
         }
         for (const o of d.owned ?? []) await db.prepare("INSERT OR REPLACE INTO owned (player, look_id, order_id, granted_at) VALUES (?, ?, 'x', ?)").bind(o.player, o.lookId, o.at).run();
         if (d.rate) await db.prepare("INSERT OR REPLACE INTO meta (key, value, at) VALUES ('rate', ?, ?)").bind(d.rate.value, d.rate.at).run();
+      },
+      async seedLogins(rows) {
+        for (const r of rows) await db.prepare("INSERT INTO admin_logins (at, country, browser) VALUES (?, ?, ?)").bind(r.at, r.country, r.browser).run();
+      },
+      async seedSessions(n) {
+        const now = Date.now();
+        for (let i = 0; i < n.admin; i++) await db.prepare("INSERT INTO sessions (id_hash, address, created_at, expires_at, via, scope) VALUES (?, ?, ?, ?, 'wallet', 'admin')").bind(`seed-admin-${i}-${now}`, owner.address, now, now + DAY).run();
+        for (let i = 0; i < n.play; i++) await db.prepare("INSERT INTO sessions (id_hash, address, created_at, expires_at, via, scope) VALUES (?, ?, ?, ?, 'wallet', 'play')").bind(`seed-play-${i}-${now}`, owner.address, now, now + 30 * DAY).run();
+      },
+      async sessionCounts() {
+        const n = async (scope: string) => (await db.prepare("SELECT COUNT(*) AS n FROM sessions WHERE scope = ? AND id_hash LIKE 'seed-%'").bind(scope).first<{ n: number }>())!.n;
+        return { admin: await n("admin"), play: await n("play") };
       },
       async snapshot() {
         const q = async (sql: string) => JSON.stringify((await db.prepare(sql).all()).results);

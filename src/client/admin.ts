@@ -15,6 +15,7 @@ mountAdmin(document.getElementById("admin-panel")!, {
   defaultsFile: "game.config.json",
   noAddressHelp: "Set RECEIVE_ADDRESS in your Cloudflare dashboard (Workers & Pages, your game, Settings, Variables), then deploy again.",
   repoHelp: "To get a link to your looks.json on GitHub, set GITHUB_REPO (for example your-name/your-game) in wrangler.jsonc.",
+  loginsNote: "This game keeps each sign-in for 30 days: only the time, the rough country and a short browser name. No address, no IP address and no browser text.",
   // The wallet sign-in of the ADMIN scope (its own cookie): only a wallet signature that was started from /admin makes an admin login.
   signIn: async (into, done) => {
     const config = await get<Config>("/api/config").catch((): Config => ({ name: "", creator: "", testMode: true, turnstileSiteKey: null }));

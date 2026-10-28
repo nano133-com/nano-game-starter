@@ -13,7 +13,7 @@ import { callback as nanoterraCallback, cancel as nanoterraCancel, confirm as na
 import { Busy, MAX_OPEN_PER_PLAYER, orderById, orderView, reserve, type OrderRow } from "./orders";
 import { PRICE_FEEDS, usdPerXno } from "./price";
 import { d1Limit, LIMITS, memoryLimit, visitorKey } from "./ratelimit";
-import { checkSignin, nanchatRoute, nautilusRoute, scopeOf, sessionOf, signOut, startSignin, walletRoute, wayOf } from "./signin";
+import { ADMIN_LOGIN_KEEP_MS, checkSignin, nanchatRoute, nautilusRoute, scopeOf, sessionOf, signOut, startSignin, walletRoute, wayOf } from "./signin";
 import { sweep } from "./sweep";
 import { turnstileOk } from "./turnstile";
 import { warm } from "./warm";
@@ -200,6 +200,7 @@ async function cleanUp(db: D1Database, now: number) {
     db.prepare("DELETE FROM signin_requests WHERE expires_at < ?").bind(now - 2 * 3_600_000),
     db.prepare("DELETE FROM sessions WHERE expires_at < ?").bind(now),
     db.prepare("DELETE FROM hits WHERE win < ?").bind(Math.floor((now - 86_400_000) / LIMITS.order.windowMs)),
+    db.prepare("DELETE FROM admin_logins WHERE at < ?").bind(now - ADMIN_LOGIN_KEEP_MS),
   ]);
 }
 

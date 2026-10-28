@@ -39,6 +39,7 @@ import {
   type RequestStore,
   type WalletRequest,
 } from "@nano133/signin";
+import { countryOf, shortBrowser } from "./browser";
 import { EXAMPLE_ADDRESS, receiveAddress, type Env } from "./env";
 import { fail, json, randomHex, readCookie, setCookie, sha256Hex, tooLarge } from "./http";
 import { d1Limit, LIMITS, memoryLimit } from "./ratelimit";
@@ -47,6 +48,11 @@ export const SESSION_DAYS = 30;
 const STARTER_MAX_AGE = 30 * 60;
 /** An admin sign-in counts for one day; then the creator signs in again. */
 export const ADMIN_SESSION_MS = 24 * 60 * 60_000;
+/** An admin sign-in REQUEST lives 2 minutes (the game's lives up to 5), and a signature is delivered for one more minute after it ends. It works once. */
+export const ADMIN_REQUEST_MS = 2 * 60_000;
+export const ADMIN_DELIVER_MS = 60_000;
+/** How long a row of the admin's sign-in list is kept: 30 days. */
+export const ADMIN_LOGIN_KEEP_MS = 30 * 24 * 60 * 60_000;
 
 /**
  * Whose login it is: "play" (the game's, cookie `session`) or "admin" (/admin's, cookie `admin`). They are separate cookies with
@@ -120,13 +126,26 @@ export function d1Requests(db: D1Database, way: Way): RequestStore {
  * player opened. Nautilus also names a Nano address of the site's own: the creator's RECEIVE_ADDRESS (only named
  * in the request and in the signed text; no key, no payment), or the example address while none is set.
  */
-export function wallets(env: Env, req: Request, now?: () => number) {
+export function wallets(env: Env, req: Request, now?: () => number, admin?: { country: string | null }) {
   const url = new URL(req.url);
   const at = now ? { now } : {};
+  // A request that opens the ADMIN says so in what the wallet signs, and lives 2 minutes: Berry Wallet signs the page it signs in to ("URI: https://example.com/admin?from=US"),
+  // Nautilus signs its label ("ADMIN of example.com sign-in ABCD-EFGH from US"). Both texts carry the place the request started, so a person who is sent a link from elsewhere can tell.
+  // (NanChat is not offered for the admin: its text must start "Login to <host>" and its docs do not say what may follow.)
+  const life = admin ? { ttlMs: ADMIN_REQUEST_MS } : {};
+  const started = new Date(now?.() ?? Date.now()).toISOString().slice(11, 16);
+  const adminLine = `Sign in to the ADMIN of ${url.host}. Started ${started} UTC from ${admin?.country ?? "an unknown country"}. If you did not start this, do not sign.`;
   return {
-    berry: { domain: url.host, uri: `${url.origin}/`, store: d1Requests(env.DB, "berry"), ...at } satisfies NanoSigninOptions,
-    nautilus: { site: url.host, siteAddress: receiveAddress(env) ?? EXAMPLE_ADDRESS, store: d1Requests(env.DB, "nautilus"), ...at } satisfies NautilusOptions,
-    nanchat: { host: url.host, store: d1Requests(env.DB, "nanchat"), ...at } satisfies NanchatOptions,
+    berry: { domain: url.host, uri: admin ? `${url.origin}/admin${admin.country ? `?from=${admin.country}` : ""}` : `${url.origin}/`, store: d1Requests(env.DB, "berry"), ...life, ...at } satisfies NanoSigninOptions,
+    nautilus: {
+      site: url.host,
+      siteAddress: receiveAddress(env) ?? EXAMPLE_ADDRESS,
+      store: d1Requests(env.DB, "nautilus"),
+      ...(admin ? { title: `ADMIN of ${url.host}`, ...(admin.country ? { note: `from ${admin.country}` } : {}), message: adminLine } : {}),
+      ...life,
+      ...at,
+    } satisfies NautilusOptions,
+    nanchat: { host: url.host, store: d1Requests(env.DB, "nanchat"), ...life, ...at } satisfies NanchatOptions,
     requestUrl: (id: string) => `${url.origin}/api/signin/nano/${id}`,
     nautilusUrl: (id: string) => `${url.origin}/api/signin/nautilus?id=${id}`,
     nanchatUrl: `${url.origin}/api/signin/nanchat`,
@@ -134,9 +153,12 @@ export function wallets(env: Env, req: Request, now?: () => number) {
 }
 
 export async function startSignin(env: Env, req: Request, way: Way, now?: () => number, scope: Scope = "play"): Promise<Response> {
+  const admin = scope === "admin" ? { country: countryOf(req) } : undefined;
+  // NanChat cannot name the admin in what it signs (its text must start "Login to <host>"): an admin request through it would look like any sign-in to the owner who is asked to sign.
+  if (admin && way === "nanchat") return fail(400, "NanChat cannot open the admin yet. Use Berry Wallet or Nautilus.");
   const starter = randomHex(32);
   const hash = await keyOf(starter, scope);
-  const w = wallets(env, req, now);
+  const w = wallets(env, req, now, admin);
   let out: Record<string, unknown>;
   if (way === "nautilus") {
     const s = await startNautilus(w.nautilus, { starter: hash, answerUrl: w.nautilusUrl });
@@ -145,7 +167,8 @@ export async function startSignin(env: Env, req: Request, way: Way, now?: () => 
     const s = await startNanchat(w.nanchat, { starter: hash, answerUrl: w.nanchatUrl });
     out = { way, id: s.id, link: s.link, expiresAt: s.expiresAt };
   } else {
-    const s = await startNanoSignin(w.berry, { starter: hash, requestUrl: w.requestUrl });
+    // `label` keeps what kind of request this is (and where it started), so the wallet's GET and POST get the same text: see `kindOf`.
+    const s = await startNanoSignin(w.berry, { starter: hash, requestUrl: w.requestUrl, ...(admin ? { label: admin.country ? `admin:${admin.country}` : "admin" } : {}) });
     out = { way, id: s.id, link: s.link, walletLink: s.walletLink, expiresAt: s.expiresAt };
   }
   return json(out, 200, { "Set-Cookie": setCookie(req, STARTER_COOKIE[scope], starter, STARTER_MAX_AGE) });
@@ -164,9 +187,20 @@ async function walletBody(req: Request): Promise<Record<string, unknown> | null>
   }
 }
 
+/**
+ * What kind of Berry request `id` is: an ADMIN one (`{ country }`, the country it started from or null) or the game's (undefined), read from the note that `startSignin` kept with it.
+ * The wallet's GET and POST come with no cookie, so the stored note is the only way to build the same text for the same request.
+ */
+async function kindOf(db: D1Database, id: string): Promise<{ country: string | null } | undefined> {
+  if (!/^[0-9a-f]{32}$/.test(id)) return undefined;
+  const label = (await d1Requests(db, "berry").get(id))?.label;
+  if (typeof label !== "string" || !/^admin(:[A-Z]{2})?$/.test(label)) return undefined;
+  return { country: label.length > 5 ? label.slice(6) : null };
+}
+
 /** Berry Wallet's GET and POST. They come from the wallet app, so there is no cookie and no Origin to check. */
 export async function walletRoute(env: Env, req: Request, id: string, now?: () => number): Promise<Response> {
-  const { berry, requestUrl } = wallets(env, req, now);
+  const { berry, requestUrl } = wallets(env, req, now, await kindOf(env.DB, id));
   if (req.method === "GET") {
     const request = await readNanoSignin(berry, id, requestUrl);
     return request ? json(request) : json(nanoSigninRefusal("This sign-in expired."), 404);
@@ -234,7 +268,8 @@ export async function checkSignin(db: D1Database, req: Request, id: unknown, way
   if (typeof id !== "string") return fail(400, "no request id");
   const cookie = readCookie(req, STARTER_COOKIE[scope]);
   const starter = cookie ? await keyOf(cookie, scope) : undefined;
-  const o = { store: d1Requests(db, way), now: () => nowMs };
+  // An admin request is delivered for a minute after it ends (the game's, for an hour as it always was).
+  const o = { store: d1Requests(db, way), now: () => nowMs, ...(scope === "admin" ? { deliverMs: ADMIN_DELIVER_MS } : {}) };
   const r = way === "nautilus" ? await checkNautilus(o, id, starter) : way === "nanchat" ? await checkNanchat(o, id, starter) : await checkNanoSignin(o, id, starter);
   if (r.status !== "signedin") return json({ status: r.status });
   if (!r.mine || !r.account) return json({ status: "elsewhere" });
@@ -245,6 +280,8 @@ export async function checkSignin(db: D1Database, req: Request, id: unknown, way
   const once = await db.prepare("UPDATE signin_requests SET delivered = 1 WHERE id = ? AND way = ? AND delivered = 0 AND status = 'signedin'").bind(r.key ?? id, way).run();
   if (once.meta.changes !== 1) return json({ status: "used" });
   const token = await createSession(db, r.account, nowMs, "wallet", scope);
+  // The admin's sign-in list: the time, the rough country and a short browser name of THIS browser (the one that started the request and now gets the login). Nothing else.
+  if (scope === "admin") await recordAdminLogin(db, req, nowMs);
   return json({ status: "signedin", address: r.account }, 200, { "Set-Cookie": setCookie(req, SESSION_COOKIE[scope], token, lifeOf(scope) / 1000) });
 }
 
@@ -257,13 +294,24 @@ export const lifeOf = (scope: Scope): number => (scope === "admin" ? ADMIN_SESSI
 export async function createSession(db: D1Database, address: string, now = Date.now(), via: Via = "wallet", scope: Scope = "play"): Promise<string> {
   const token = randomHex(32);
   await db
-    .prepare("INSERT INTO sessions (id_hash, address, created_at, expires_at, via) VALUES (?, ?, ?, ?, ?)")
-    .bind(await keyOf(token, scope), address, now, now + lifeOf(scope), via)
+    .prepare("INSERT INTO sessions (id_hash, address, created_at, expires_at, via, scope) VALUES (?, ?, ?, ?, ?, ?)")
+    .bind(await keyOf(token, scope), address, now, now + lifeOf(scope), via, scope)
     .run();
   return token;
 }
 
 /** `via` is "unknown" for a stored word that is neither: it is never read as a wallet login (the admin guard refuses it, as it refuses anything but "wallet"). */
+/**
+ * Writes one row of the admin's sign-in list: the time, the country of the request (two letters or none) and a short browser name made from fixed lists. No address, no IP and no browser text.
+ * Rows older than 30 days are deleted at the same time.
+ */
+export async function recordAdminLogin(db: D1Database, req: Request, now: number): Promise<void> {
+  await db.batch([
+    db.prepare("INSERT INTO admin_logins (at, country, browser) VALUES (?, ?, ?)").bind(now, countryOf(req), shortBrowser(req.headers.get("User-Agent"))),
+    db.prepare("DELETE FROM admin_logins WHERE at < ?").bind(now - ADMIN_LOGIN_KEEP_MS),
+  ]);
+}
+
 export type Session = { address: string; createdAt: number; via: Via | "unknown" };
 
 export async function sessionOf(db: D1Database, req: Request, now = Date.now(), scope: Scope = "play"): Promise<Session | null> {

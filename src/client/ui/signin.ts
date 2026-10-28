@@ -32,7 +32,13 @@ export function signInView(config: Config, onDone: (me: Me) => void, scope: "pla
   const status = h("p", { class: "status", role: "status" });
   const check = h("div", { class: "turnstile", hidden: true });
   const area = h("div", { class: "signin-area" });
-  const node = h("div", { class: "signin" }, h("p", {}, "No password and no payment. Your wallet signs a short message that names this game."), check, area, status);
+  // The admin's sign-in says so, and does not offer NanChat (it cannot name the admin in what it signs).
+  const wallets = scope === "admin" ? WALLETS.filter((w) => w.way !== "nanchat") : WALLETS;
+  const intro =
+    scope === "admin"
+      ? "No password and no payment. This signs in to the ADMIN of this game: your wallet signs a short message that says so. If you did not start this yourself, do not sign."
+      : "No password and no payment. Your wallet signs a short message that names this game.";
+  const node = h("div", { class: "signin" }, h("p", {}, intro), check, area, status);
 
   const stop = () => {
     stopped = true;
@@ -40,7 +46,7 @@ export function signInView(config: Config, onDone: (me: Me) => void, scope: "pla
   };
 
   function showTiles() {
-    const tiles = WALLETS.map((w) =>
+    const tiles = wallets.map((w) =>
       h("button", { class: "wallet-tile", type: "button", onclick: () => choose(w.way) }, h("span", { class: "wallet-mark", "aria-hidden": "true" }, w.mark), h("span", { class: "wallet-name" }, w.name)),
     );
     area.replaceChildren(h("p", { class: "signin-ask" }, "Choose your wallet"), h("div", { class: "wallet-tiles" }, ...tiles));

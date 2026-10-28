@@ -160,10 +160,10 @@ describe("the server keeps the two logins apart, not only the cookies' names", (
   it("another wallet makes no admin login, leaves the owner's admin login alone, and the request stays unused", async () => {
     const browser = await signedInWith(env, "berry", owner, "admin");
     const token = browser.jar.get("admin");
-    const start = await browser.call(env, "/api/signin/start", { body: { way: "nanchat", scope: "admin" } });
-    await walletAnswer(env, "nanchat", start.body, player);
+    const start = await browser.call(env, "/api/signin/start", { body: { way: "nautilus", scope: "admin" } });
+    await walletAnswer(env, "nautilus", start.body, player);
     const before = await sessionCount();
-    const refused = await browser.call(env, "/api/signin/check", { body: { id: start.body.id, way: "nanchat", scope: "admin" } });
+    const refused = await browser.call(env, "/api/signin/check", { body: { id: start.body.id, way: "nautilus", scope: "admin" } });
     expect(refused.body).toEqual({ status: "not_owner", address: player.address });
     expect(refused.res.headers.getSetCookie()).toEqual([]);
     expect(browser.jar.get("admin")).toBe(token);

@@ -98,7 +98,11 @@ the risk first, then change it only with tests in `test/` that show the new rule
 6. **Sign-in** (`src/worker/signin.ts`, the `@nano133/signin` package): players sign in with Berry
    Wallet, NanChat or Nautilus. The signed text names the game's domain; only the browser that started a
    sign-in gets the session; one session per sign-in. Whichever wallet signs, only `RECEIVE_ADDRESS` opens
-   `/admin`. NanChat's answers all come through its relay server, so their limits are totals and per
+   `/admin`. **The admin's wallet text names the admin** (Berry: the `uri` is `/admin?from=<country>`; Nautilus: the label is `ADMIN of <host> sign-in <code> from <country>`), an admin
+   request lives 2 minutes (`ADMIN_REQUEST_MS`) and is delivered for one more minute (`ADMIN_DELIVER_MS`), NanChat is refused for the admin, and Berry's kind (admin or game) is kept in the
+   request's `label` so the wallet's GET and POST get the same text (`kindOf`). `test/adminSignin.test.ts` pins that a game signature never opens `/admin` and an admin one never makes a
+   game session. Do not change any of it without that test. The admin's sign-in list keeps only a time, a two-letter country and a short browser name (`src/worker/browser.ts`): never an
+   address, an IP or a browser text. NanChat's answers all come through its relay server, so their limits are totals and per
    sign-in, never per visitor.
 7. **Security headers and CORS** (`src/shared/security.ts`, `src/worker/http.ts`): a strict Content
    Security Policy; calls that change something must come from the game's own pages. Do not loosen

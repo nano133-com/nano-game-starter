@@ -122,6 +122,13 @@ describe("Sign in with NanChat", () => {
 describe("the admin guard, with each wallet", () => {
   for (const way of WAYS) {
     it(`${way}: opens for the receive address, and refuses another address`, async () => {
+      if (way === "nanchat") {
+        // NanChat cannot name the admin in what it signs, so it does not open the admin at all (the page does not offer it, and the server refuses it).
+        const start = await new Browser().call(env, "/api/signin/start", { body: { way, scope: "admin" } });
+        expect(start.status).toBe(400);
+        expect(start.body.error).toMatch(/NanChat cannot open the admin/);
+        return;
+      }
       const creator = await signedInWith(env, way, owner, "admin");
       expect((await creator.call(env, "/api/admin/summary")).status).toBe(200);
       // The admin login is not the game's: this browser is still a guest in the game.

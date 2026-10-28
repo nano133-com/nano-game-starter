@@ -10,11 +10,14 @@ export const ORIGIN = "http://game.test";
 
 export class Browser {
   jar = new Map<string, string>();
-  /** The page's origin: http by default, https to see the `__Host-` cookies. */
-  constructor(public base: string = ORIGIN) {}
+  /** The page's origin: http by default, https to see the `__Host-` cookies. `headers`: more headers on every call of this browser (a country, a browser text). */
+  constructor(
+    public base: string = ORIGIN,
+    public headers: Record<string, string> = {},
+  ) {}
 
   async call(env: Env, path: string, o: { method?: string; body?: unknown; origin?: string | null; now?: number } = {}) {
-    const headers = new Headers({ "Content-Type": "application/json", "CF-Connecting-IP": "203.0.113.7" });
+    const headers = new Headers({ "Content-Type": "application/json", "CF-Connecting-IP": "203.0.113.7", ...this.headers });
     const origin = o.origin === undefined ? this.base : o.origin;
     if (origin) headers.set("Origin", origin);
     if (this.jar.size) headers.set("Cookie", [...this.jar].map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("; "));

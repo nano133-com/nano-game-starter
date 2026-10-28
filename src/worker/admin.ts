@@ -20,8 +20,8 @@ export { ADMIN_SESSION_MS };
 /** What the two switches are until /admin sets them: game.config.json's words. */
 export const gameDefaults = { character: CONFIG.character, signin: CONFIG.signin } as const;
 
-/** The admin's store: this game's D1 tables (meta, orders, owned). The only thing it writes is the two settings. */
-export const gameStore = (env: Env) => createD1Store(env.DB);
+/** The admin's store: this game's D1 tables (meta, orders, owned, and admin_logins for the sign-in list). It writes the two settings, and deletes the admin sessions for "Sign out everywhere". */
+export const gameStore = (env: Env) => createD1Store(env.DB, { logins: true });
 
 /** What only this game knows: its address, test mode and what is still off. The counts come from the store. */
 function adminStatus(env: Env, s: StoreSummary): AdminStatus {
