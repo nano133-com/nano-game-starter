@@ -186,7 +186,7 @@ function signinHost(way: "berry" | "nautilus"): SigninHost {
 }
 
 describe("the kit's sign-in chain contract, run against this game's own sign-in (Berry Wallet, Nautilus)", () => {
-  for (const way of ["berry", "nautilus"] as const) for (const c of adminSigninConformance(signinHost(way), { signOutEverywhere: true })) it(`[${way}] ${c.name}`, c.run);
+  for (const way of ["berry", "nautilus"] as const) for (const c of adminSigninConformance(signinHost(way), { signOutEverywhere: true, advance: true })) it(`[${way}] ${c.name}`, c.run);
 });
 
 describe("the same suite over https, where the cookies are __Host-session and __Host-admin", () => {
