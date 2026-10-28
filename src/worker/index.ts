@@ -107,6 +107,14 @@ export async function handleApi(req: Request, env: Env, now = Date.now()): Promi
   const method = req.method;
 
   if (method === "OPTIONS") {
+    // The admin never answers a preflight: for a path of /api/admin the guard answers (401 or 403 for a visitor, 405 for the owner), with no CORS header.
+    let spelled = path;
+    try {
+      spelled = decodeURIComponent(path);
+    } catch {
+      // A bad percent code: read the path as it is.
+    }
+    if (/^\/api[/\\]admin([/\\]|$)/i.test(spelled.replace(/\/{2,}/g, "/"))) return (await adminGuard(env, req, now)) ?? fail(405, "Not allowed.");
     // CORS: only the game's own pages may call the API.
     const origin = req.headers.get("Origin");
     if (origin !== url.origin) return new Response(null, { status: 403 });
