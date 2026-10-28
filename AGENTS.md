@@ -14,7 +14,8 @@ creator's address. The Worker holds **no key**: it only reads the Nano ledger to
 |---|---|
 | `game.config.json` | Name, one line, creator name, listing pictures, round length, and the defaults of the two switches (`"character"`, `"signin"`). Safe to change. |
 | `src/worker/admin.ts`, `src/client/admin.ts` | The admin (`/admin`) **is the package** `@nano133/nanoterra` (paths `/admin`, `/admin/d1`, `/admin/panel`, `/admin/style.css`): the guard, the routes, the D1 store, the panel with the "Game" card (two switches kept in the `meta` table as `setting:character` and `setting:signin`), the Shelf, the orders. These two files only give the package what is this game's own: the owner, the admin session, the status, the looks and the wallet sign-in. See "Rules for looks" (the Shelf never writes) and the admin guard below. |
-| `looks.json` | The looks: `id`, `name`, `priceUsd`, and `change` (`body` colour, optional `hat` and `hatColor`). Safe to change, with the rules below. |
+| `looks.json` | The looks: `id`, `name`, `priceUsd`, and `change` (`body` colour, optional `hat` and `hatColor`), and optional `slots` (a model in `head`, `hand` or `back`). Safe to change, with the rules below. |
+| `public/looks/` | The looks' models (`.glb`). Each passes `test/lookModels.test.ts`. |
 | `src/client/game/` | The game: `world.ts` (the level), `character.ts` (what a character does, and the penguin), `nanoterraCharacter.ts` (the Nanoterra character), `hat.ts`, `gems.ts`, `controls.ts`, `game.ts` (rules, speed, camera). Safe to change. |
 | `src/client/ui/`, `src/client/style.css` | The sheets (looks, sign-in, pay) and the look of the page. Change with care (see "Never change"). |
 | `public/` | Static files: `art/wide.jpg`, `art/tall.jpg`, `favicon.svg`. |
@@ -52,6 +53,11 @@ npm run check      # typecheck + tests + build: run it before every commit
   something paints the Nanoterra character's shirt (its body when it wears no top); the free look must never hide the character that a signed-in player brought.
   The body is display only: never give a base or a size a different collider, jump or reach.
 - **Looks:** add a look to `looks.json` with a new `id`. Keep one free look (`priceUsd: 0`).
+- **A look's model:** a look's slot `head`, `hand` or `back` names a model in `public/looks/` (`"slots": { "hand": "shovel" }` is
+  `public/looks/shovel.glb`). `src/client/game/worn.ts` loads it (GLTFLoader, only when worn), shares it and frees it; the Nanoterra character
+  hangs it on `socket(slot)` and the penguin on its own flipper, head or back. A hand model has an empty `grip_R` node where the hand holds it.
+  `test/lookModels.test.ts` runs the package's cosmetic check (`@nano133/nanoterra/model`, `COSMETIC_LIMITS[slot]`) on every model there: never
+  add an exception to make a new model pass.
 - Keep the first load small (no big model or sound files without a reason), and keep 60 frames a
   second on a mid-range phone: few objects, simple materials, no real-time shadows.
 

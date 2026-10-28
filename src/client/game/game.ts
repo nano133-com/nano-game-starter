@@ -109,6 +109,8 @@ export class Game {
   setCharacter(kind: "nanoterra" | "own") {
     if (kind === this.characterKind) return;
     const old = this.character;
+    // The look's models first: they are shared, so worn.ts frees them, not the loop below.
+    old.release();
     this.scene.remove(old.group, old.ground);
     for (const node of [old.group, old.ground]) {
       node.traverse((o) => {

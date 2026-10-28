@@ -57,6 +57,25 @@ nothing to GitHub. When you like the draft, press **Copy looks.json** and put th
 the admin panel, which comes from the package [`@nano133/nanoterra`](https://www.npmjs.com/package/@nano133/nanoterra) (path `/admin/panel`): the same `/admin` that any Three.js game can mount.
 This game only gives the panel what is its own: the owner address, the admin login, the looks and the wallet sign-in (`src/client/admin.ts`, `src/worker/admin.ts`).
 
+## A look with its own 3D model
+
+A look can carry a small model: a thing in the hand, on the head or on the back. Put the `.glb` in `public/looks/` and name it in one of
+three slots of the look:
+
+```json
+{ "id": "shovel", "name": "Shovel", "priceUsd": 0.5, "change": { "body": "#7b5532" }, "slots": { "hand": "shovel" } }
+```
+
+`"hand": "shovel"` means `public/looks/shovel.glb`, held in the right hand. The game loads the model only when a player wears the look, draws
+it in the game's toon light with a thin outline, and frees it when nobody wears it (`src/client/game/worn.ts`). On the Nanoterra character it
+hangs on the package's socket (`socket("hand")`), so it follows the hand on every body. The example shovel holds its `grip_R` marker (an empty
+node where the right hand holds it) in the hand and points forward.
+
+`npm test` checks every model in `public/looks` with the package's cosmetic check (`@nano133/nanoterra/model`): for a hand thing at most
+3,000 triangles, 1 texture of 512 px, 2 draws and 300 KB, inside 0.4 x 0.4 x 1.6 m from 0.3 m below its grip (the head and the back have their
+own sizes). No animation, no armature. The example shovel is 646 triangles, 1 draw and 48 KB, but it is wider and longer than that hand zone:
+the test names it as the one exception (`test/lookModels.test.ts`) until the zone is decided.
+
 ## Signing in to /admin
 
 Only a wallet signature opens `/admin`, and **what the wallet signs says so**, so that a link sent to you by a stranger does not look like any sign-in:
@@ -182,6 +201,7 @@ The tests use a fake Nano node and keys made in the test: no network and no mone
 |---|---|
 | `game.config.json` | The game's name, its one line, your name, the round's length, and the character switch (`"character": "nanoterra"` or `"own"`) |
 | `looks.json` | The looks, their prices in US dollars and what they change |
+| `public/looks/` | The looks' own 3D models (`.glb`), named in a look's `slots` |
 | `src/client/game/` | The 3D game: the island (`world.ts`), the character, the gems, the rules (`game.ts`) |
 | `public/art/` | The listing pictures (`wide.jpg` 1600×900, `tall.jpg` 900×1600) |
 

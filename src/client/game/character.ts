@@ -8,8 +8,10 @@ import * as THREE from "three";
 import type { Look as NanoterraLook } from "@nano133/nanoterra";
 import { CONFIG } from "../../shared/config";
 import type { Look } from "../../shared/looks";
+import { HAND_HOLD } from "@nano133/nanoterra/character";
 import { buildHat, disposeHat } from "./hat";
 import { NanoterraCharacter } from "./nanoterraCharacter";
+import { modelsOf, wearModel, type ModelSlot, type WornModel } from "./worn";
 import { toon } from "./world";
 
 /** The player's Nanoterra character as `/api/me` gives it: the five colours, and the whole record (two numbers on closed lists) when Nanoterra sent one. */
@@ -27,6 +29,8 @@ export interface Avatar {
   setNanoterra(player: NanoterraPlayer | null): void;
   /** One frame. `group.position` is already where the character stands. `speed` is metres a second over the ground. */
   animate(dt: number, motion: { speed: number; airborne: boolean; verticalSpeed: number }): void;
+  /** Takes off the look's models (worn.ts frees a model when nobody wears it). Call it before the character is thrown away. */
+  release(): void;
 }
 
 /** The character for `kind`: the switch of /admin ("Game" card), which starts as game.config.json's word. */
@@ -42,6 +46,10 @@ export class Character implements Avatar {
   private readonly shadow: THREE.Mesh;
   private readonly bodyMat: THREE.MeshToonMaterial;
   private step = 0;
+  /** Where the look's models hang: the head (with the hat), the right flipper's tip and the back (worn.ts). */
+  private readonly sockets: Record<ModelSlot, THREE.Object3D>;
+  private models: WornModel[] = [];
+  private dressing = 0;
 
   constructor(private readonly ramp: THREE.Texture) {
     this.bodyMat = toon("#4aa8ff", ramp);
@@ -75,6 +83,15 @@ export class Character implements Avatar {
     this.hat.position.y = 1.52;
     inner.add(this.body, belly, head, beak, this.hat, ...this.arms, ...this.feet);
     this.group.add(inner);
+    // The right flipper is the first (side -1: the character's right, facing +z). Its tip holds a hand model as the kit's hand socket does.
+    const hand = new THREE.Group();
+    hand.position.set(0, -0.3, 0);
+    hand.quaternion.copy(HAND_HOLD);
+    this.arms[0]!.add(hand);
+    const back = new THREE.Group();
+    back.position.set(0, 0.85, -0.44);
+    inner.add(back);
+    this.sockets = { head: this.hat, hand, back };
 
     this.shadow = new THREE.Mesh(new THREE.CircleGeometry(0.62, 20), new THREE.MeshBasicMaterial({ color: "#000000", transparent: true, opacity: 0.22, depthWrite: false }));
     this.shadow.rotation.x = -Math.PI / 2;
@@ -87,9 +104,26 @@ export class Character implements Avatar {
 
   wear(look: Look) {
     this.bodyMat.color.set(look.change.body);
+    // The models first (a head model hangs beside the hat): they are shared, so they are released, never disposed here.
+    const turn = ++this.dressing;
+    this.release();
     for (const old of [...this.hat.children]) disposeHat(old);
     const hat = buildHat(look, this.ramp);
     if (hat) this.hat.add(hat);
+    for (const { slot, name } of modelsOf(look)) {
+      wearModel(name, slot, this.ramp)
+        .then((m) => {
+          if (turn !== this.dressing) return m.release();
+          this.models.push(m);
+          this.sockets[slot].add(m.object);
+        })
+        .catch((e) => console.warn(`The look's model ${name} did not load:`, e));
+    }
+  }
+
+  release() {
+    for (const m of this.models) m.release();
+    this.models = [];
   }
 
   /** The penguin has no Nanoterra look. */
