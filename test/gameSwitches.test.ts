@@ -1,10 +1,10 @@
-// The "Game" card of /admin: two switches kept in the `meta` table (src/worker/gameSettings.ts), read by the Worker at run time. They move the
+// The "Game" card of /admin: two switches kept in the `meta` table (the package's D1 store), read by the Worker at run time. They move the
 // character choice and the sign-in word of the listing with no push and no deploy. The routes sit behind the SAME admin guard as every admin
 // call: this file checks each refusal again for the new routes, and that a press changes only these two settings.
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { CONFIG } from "../src/shared/config";
-import { isCharacter, isSigninChoice, parsePatch, pressOf, REVIEW_NOTE, signinOn, stateOf, SWITCHES } from "../src/shared/gameSwitches";
+import { isCharacter, isSigninChoice, parsePatch, pressOf, REVIEW_NOTE, signinOn, stateOf, SWITCHES } from "@nano133/nanoterra/admin";
 import { EXAMPLE_ADDRESS, type Env } from "../src/worker/env";
 import worker from "../src/worker/index";
 import { createSession } from "../src/worker/signin";
@@ -33,7 +33,7 @@ const settings = async () => (await db.prepare("SELECT key, value FROM meta ORDE
 /** The whole Worker (the listing and the Nanoterra pages are not under /api). */
 const fetchAs = (env: Env, path: string, init: RequestInit = {}) => worker.fetch(new Request(`${ORIGIN}${path}`, { headers: { "CF-Connecting-IP": "203.0.113.50" }, ...init }), env);
 
-describe("the words of the switches (src/shared/gameSwitches.ts)", () => {
+describe("the words of the switches (@nano133/nanoterra/admin)", () => {
   it("parsePatch takes the two known words and nothing else", () => {
     expect(parsePatch({ character: "own" })).toEqual({ ok: true, patch: { character: "own" } });
     expect(parsePatch({ signin: "none" })).toEqual({ ok: true, patch: { signin: "none" } });
@@ -107,7 +107,8 @@ describe("the Game switches through the Worker", () => {
     }
     expect((await settings()).some((x) => x.key.startsWith("setting:"))).toBe(false);
     const big = await fetchAs(live(), "/api/admin/game", { method: "POST", headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: `admin=${[...b.jar.values()][0]}` }, body: JSON.stringify({ character: "own", pad: "x".repeat(600) }) });
-    expect(big.status).toBe(400);
+    // Too much to read is 413 (the package's handler stops reading at the limit), not 400.
+    expect(big.status).toBe(413);
     expect((await settings()).some((x) => x.key.startsWith("setting:"))).toBe(false);
   });
 

@@ -13,14 +13,13 @@ creator's address. The Worker holds **no key**: it only reads the Nano ledger to
 | Path | What |
 |---|---|
 | `game.config.json` | Name, one line, creator name, listing pictures, round length, and the defaults of the two switches (`"character"`, `"signin"`). Safe to change. |
-| `src/shared/gameSwitches.ts`, `src/worker/gameSettings.ts`, `src/client/gameSwitches.ts` | The "Game" card of `/admin`: two switches kept in the `meta` table (`setting:character`, `setting:signin`), read at run time. See "Rules for looks" (the Shelf never writes) and the admin guard below. |
+| `src/worker/admin.ts`, `src/client/admin.ts` | The admin (`/admin`) **is the package** `@nano133/nanoterra` (paths `/admin`, `/admin/d1`, `/admin/panel`, `/admin/style.css`): the guard, the routes, the D1 store, the panel with the "Game" card (two switches kept in the `meta` table as `setting:character` and `setting:signin`), the Shelf, the orders. These two files only give the package what is this game's own: the owner, the admin session, the status, the looks and the wallet sign-in. See "Rules for looks" (the Shelf never writes) and the admin guard below. |
 | `looks.json` | The looks: `id`, `name`, `priceUsd`, and `change` (`body` colour, optional `hat` and `hatColor`). Safe to change, with the rules below. |
 | `src/client/game/` | The game: `world.ts` (the level), `character.ts` (what a character does, and the penguin), `nanoterraCharacter.ts` (the Nanoterra character), `hat.ts`, `gems.ts`, `controls.ts`, `game.ts` (rules, speed, camera). Safe to change. |
 | `src/client/ui/`, `src/client/style.css` | The sheets (looks, sign-in, pay) and the look of the page. Change with care (see "Never change"). |
 | `public/` | Static files: `art/wide.jpg`, `art/tall.jpg`, `favicon.svg`. |
 | `src/worker/` | The server. Money and sign-in live here. See "Never change". |
-| `src/shared/` | Code for both sides: amounts (`amount.ts`), looks (`looks.ts`, with the rules in `@nano133/nanoterra/looks`), the Shelf's numbers (`shelf.ts`), config, security headers. |
-| `src/client/shelf.ts` | The Shelf screen in `/admin`: the looks with what each has sold, and a draft to change. Browser only; it writes nothing. See "Rules for looks". |
+| `src/shared/` | Code for both sides: amounts (`amount.ts`), looks (`looks.ts`, with the rules in `@nano133/nanoterra/looks`), config, security headers. |
 | `src/worker/nanoterra.ts` | Sign in from Nanoterra (`/nanoterra/callback`, `/nanoterra/confirm`, `/nanoterra/cancel`): trades a one-time code for the player's details, shows a confirm screen, makes a session on Continue. See "Never change". |
 | `migrations/` | The database tables. Add a new numbered file; never edit an applied one. |
 | `test/` | Tests for money, records and sign-in. |
@@ -70,8 +69,8 @@ npm run check      # typecheck + tests + build: run it before every commit
 - **The Shelf (`/admin`) never writes.** It edits a draft in the creator's browser and gives text to copy. Do not add a server call that
   changes `looks.json`, the database's looks or prices: an editor would give the server a new way to change data. A change of looks is a
   change of the repository, pushed to GitHub. **The "Game" card is not the Shelf:** its two switches (`POST /api/admin/game`) write only the two
-  settings `setting:character` and `setting:signin`, behind the same admin guard; the route takes nothing else, and a test proves that a press changes no
-  other `meta` row, order or owned look. Keep it that way: never add a looks, price, order or address field to it.
+  settings `setting:character` and `setting:signin`, behind the same admin guard; the route takes nothing else, and the package's store contract (run in
+  `test/adminConformance.test.ts`) proves that saving changes no other `meta` row, order or owned look. Keep it that way: never add a looks, price, order or address field to it.
 - `GITHUB_REPO` (a setting, `owner/name`) only makes the Shelf link to `looks.json`. It is not a secret and it gives the game no GitHub access.
 
 ## Never change (without the creator's clear yes, and new tests)
@@ -90,8 +89,10 @@ the risk first, then change it only with tests in `test/` that show the new rule
 4. **Test mode** (`src/worker/env.ts`, `src/client/ui/pay.ts`): without a real address, or with
    `TEST_MODE` on, a pay screen shows **TEST MODE: DO NOT PAY**, no QR code, no address and no wallet
    link. A payment to an address nobody holds the key for is lost for good.
-5. **The admin guard** (`src/worker/admin.ts`; `/api/admin/game` of the "Game" card is behind it too): only the creator's own `RECEIVE_ADDRESS`, signed in
-   with Nano within the last day, can read `/api/admin/*`. **The admin login is its own cookie** (`admin`, made only by a wallet
+5. **The admin guard** (the package's `adminAccess`, used by the handler that `src/worker/admin.ts` makes; every `/api/admin/*` route is behind it, the "Game" card's too): only the
+   creator's own `RECEIVE_ADDRESS`, signed in with Nano within the last day, can read or change anything under `/api/admin`. **Do not copy the guard back into this repository and do not
+   loosen it.** The part that is this game's own (the owner and the admin session) is in `src/worker/admin.ts`; `test/adminConformance.test.ts` runs the package's conformance suite
+   against it, so a wrong cookie, a missing owner or a route outside the guard fails a test. **The admin login is its own cookie** (`admin`, made only by a wallet
    signature that `/admin` started, `scope: "admin"`; the game's is `session`): the guard reads only the admin cookie, so a login made for
    the game (a wallet, or Nanoterra) can never open `/admin`, and an admin login is not a player. Keep it that way.
 6. **Sign-in** (`src/worker/signin.ts`, the `@nano133/signin` package): players sign in with Berry
