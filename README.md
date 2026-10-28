@@ -60,7 +60,7 @@ This game only gives the panel what is its own: the owner address, the admin log
 ## Signing in to /admin
 
 Only a wallet signature opens `/admin`, and **what the wallet signs says so**, so that a link sent to you by a stranger does not look like any sign-in:
-Berry Wallet signs the page it signs in to (`URI: https://your-game/admin?from=US`: the admin, and the country the request started from) and Nautilus signs a label
+Berry Wallet signs the page it signs in to (`URI: https://your-game/admin`: the path names the admin, and there is no query because Berry refuses one) and Nautilus signs a label
 (`ADMIN of your-game sign-in ABCD-EFGH from US`, with a line that says when it started and "If you did not start this, do not sign"). **If you are asked to sign in to the admin and you did
 not start it yourself, do not sign.** An admin sign-in request lives 2 minutes and works once. NanChat is not offered for the admin (it cannot name the admin in what it signs).
 

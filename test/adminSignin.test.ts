@@ -33,13 +33,15 @@ const sessionCount = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FRO
 const berryRequest = async (id: string) => (await walletCall(env, `/api/signin/nano/${id}`)).body as Record<string, string>;
 
 describe("what the wallet signs for the admin", () => {
-  it("Berry Wallet: the URI line of the signed text names the admin and the country it started from, and the text carries the start time; the game's names neither", async () => {
+  it("Berry Wallet: the URI line of the signed text names the admin with no query (Berry refused \"/admin?from=US\"), and the text carries the start time; the game's names no admin", async () => {
     const a = await start(us(), "berry", "admin");
     expect(a.status).toBe(200);
     const req = await berryRequest(a.body.id);
-    expect(req.uri).toBe(`${ORIGIN}/admin?from=US`);
+    expect(req.uri).toBe(`${ORIGIN}/admin`);
+    expect(new URL(req.uri).search).toBe("");
     const text = nanoSigninMessage(req as never, owner.address);
-    expect(text).toContain(`URI: ${ORIGIN}/admin?from=US\n`);
+    expect(text).toContain(`URI: ${ORIGIN}/admin\n`);
+    expect(text).not.toContain("?");
     expect(text).toContain(`Issued At: ${req.issuedAt}\n`);
     expect(new Date(req.issuedAt).toISOString()).toBe(req.issuedAt);
 
@@ -49,8 +51,8 @@ describe("what the wallet signs for the admin", () => {
     expect(nanoSigninMessage(gameReq as never, owner.address)).not.toContain("admin");
   });
 
-  it("Berry Wallet: with no country (no header, or Cloudflare's XX and T1, or a bad value) the text says the admin and no country", async () => {
-    for (const value of [undefined, "XX", "T1", "usa"]) {
+  it("Berry Wallet: the address is the same /admin, with no query, with a country, with none (no header, or Cloudflare's XX and T1) and with a bad value", async () => {
+    for (const value of [undefined, "US", "XX", "T1", "usa"]) {
       const b = new Browser(ORIGIN, value === undefined ? {} : { "CF-IPCountry": value });
       const a = await start(b, "berry", "admin");
       expect((await berryRequest(a.body.id)).uri, String(value)).toBe(`${ORIGIN}/admin`);

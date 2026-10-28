@@ -98,7 +98,7 @@ the risk first, then change it only with tests in `test/` that show the new rule
 6. **Sign-in** (`src/worker/signin.ts`, the `@nano133/signin` package): players sign in with Berry
    Wallet, NanChat or Nautilus. The signed text names the game's domain; only the browser that started a
    sign-in gets the session; one session per sign-in. Whichever wallet signs, only `RECEIVE_ADDRESS` opens
-   `/admin`. **The admin's wallet text names the admin** (Berry: the `uri` is `/admin?from=<country>`; Nautilus: the label is `ADMIN of <host> sign-in <code> from <country>`), an admin
+   `/admin`. **The admin's wallet text names the admin** (Berry: the `uri` is `/admin`, with no query: Berry Wallet refused `/admin?from=US` on a device test, 2026-10-27; Nautilus: the label is `ADMIN of <host> sign-in <code> from <country>`), an admin
    request lives 2 minutes (`ADMIN_REQUEST_MS`) and is delivered for one more minute (`ADMIN_DELIVER_MS`), NanChat is refused for the admin, and Berry's kind (admin or game) is kept in the
    request's `scope` column (migration 0006, written when it starts, read again by `kindOf` and by `checkSignin`: a request started for one scope can never make a login in the other,
    whatever the browser presents; a starter cookie that is not 64 hex characters is no starter) so the wallet's GET and POST get the same text; `sessionOf` also checks the row's scope. `test/adminSignin.test.ts` pins that a game signature never opens `/admin` and an admin one never makes a

@@ -130,15 +130,16 @@ export function d1Requests(db: D1Database, way: Way, scope: Scope = "play"): Req
 export function wallets(env: Env, req: Request, now?: () => number, admin?: { country: string | null }) {
   const url = new URL(req.url);
   const at = now ? { now } : {};
-  // A request that opens the ADMIN says so in what the wallet signs, and lives 2 minutes: Berry Wallet signs the page it signs in to ("URI: https://example.com/admin?from=US"),
-  // Nautilus signs its label ("ADMIN of example.com sign-in ABCD-EFGH from US"). Both texts carry the place the request started, so a person who is sent a link from elsewhere can tell.
+  // A request that opens the ADMIN says so in what the wallet signs, and lives 2 minutes: Berry Wallet signs the page it signs in to ("URI: https://example.com/admin": the path
+  // names the admin, with NO query: Berry Wallet refused "/admin?from=US" with "Sign-in requires a public HTTPS website", device test 2026-10-27), Nautilus signs its label ("ADMIN of example.com
+  // sign-in ABCD-EFGH from US"). Nautilus's text carries the place the request started, so a person who is sent a link from elsewhere can tell; Berry's has the time ("Issued At") and the Sign-ins card has the country.
   // (NanChat is not offered for the admin: its text must start "Login to <host>" and its docs do not say what may follow.)
   const life = admin ? { ttlMs: ADMIN_REQUEST_MS } : {};
   const scopeName: Scope = admin ? "admin" : "play";
   const started = new Date(now?.() ?? Date.now()).toISOString().slice(11, 16);
   const adminLine = `Sign in to the ADMIN of ${url.host}. Started ${started} UTC from ${admin?.country ?? "an unknown country"}. If you did not start this, do not sign.`;
   return {
-    berry: { domain: url.host, uri: admin ? `${url.origin}/admin${admin.country ? `?from=${admin.country}` : ""}` : `${url.origin}/`, store: d1Requests(env.DB, "berry", scopeName), ...life, ...at } satisfies NanoSigninOptions,
+    berry: { domain: url.host, uri: admin ? `${url.origin}/admin` : `${url.origin}/`, store: d1Requests(env.DB, "berry", scopeName), ...life, ...at } satisfies NanoSigninOptions,
     nautilus: {
       site: url.host,
       siteAddress: receiveAddress(env) ?? EXAMPLE_ADDRESS,
