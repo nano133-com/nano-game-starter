@@ -65,7 +65,8 @@ export class NanoterraCharacter implements Avatar {
         .then((m) => {
           if (turn !== this.dressing) return m.release();
           this.models.push({ slot, model: m });
-          this.body.setWorn(this.models.map((w) => ({ socket: w.slot, object: w.model.object })));
+          // A back model covers a Critter's tail and a Bee's wings (the package's hideTail and hideWings).
+          this.body.setWorn(this.models.map((w) => ({ socket: w.slot, object: w.model.object, ...(w.slot === "back" ? { hideTail: true, hideWings: true } : {}) })));
         })
         .catch((e) => console.warn(`The look's model ${name} did not load:`, e)),
     );
@@ -111,5 +112,10 @@ export class NanoterraCharacter implements Avatar {
   animate(dt: number, { speed, airborne, verticalSpeed }: { speed: number; airborne: boolean; verticalSpeed: number }) {
     // The package wants the numbers of a character of its own height: a smaller one is given speed / scale.
     this.body.update(dt, { speed: speed / SCALE, airborne, verticalSpeed: verticalSpeed / SCALE });
+    // A hand model is held lower in a run, so it never comes up in front of the face (worn.ts `hold`). A rebuild makes new bones: read them here.
+    if (!this.models.some((m) => m.slot === "hand")) return;
+    const bend = -(this.body.object.getObjectByName("forearm_R")?.rotation.x ?? 0);
+    const swing = this.body.object.getObjectByName("upperarm_R")?.rotation.x ?? 0;
+    for (const m of this.models) if (m.slot === "hand") m.model.hold(bend, swing);
   }
 }

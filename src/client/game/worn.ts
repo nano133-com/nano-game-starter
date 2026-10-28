@@ -29,14 +29,32 @@ export function modelsOf(look: { slots?: Record<string, string> }): { slot: Mode
 /**
  * How a model is held, beyond its socket: a turn (radians, about the socket's own axes). The hand socket points a thing's +Y forward.
  * The shovel's grips are on the T-handle at its top and its blade is at its foot (its -Y), so it is turned half a turn to point forward
- * from the hand, and a little up (HOLD_UP): the elbow's bend in the walk and the run then lifts it, and it stays out of the ground and
- * away from the legs. Its grip_L (a second hand on the T-handle) is not used: the character's arms swing free, with no pose that puts
- * the left hand there.
+ * from the hand, a little down (HOLD_UP). Its grip_L (a second hand on the T-handle) is not used: the character's arms swing free, with no
+ * pose that puts the left hand there.
+ *
+ * In a run the elbow bends more (the package's pose: 0.12 rad at rest, 0.32 in a walk, up to 1.02 in a run) and the arm swings further
+ * forward, and both lift a thing that points forward up in front of the face. `hold(bend, swing)` turns the thing down again in a run
+ * (Wes, 2026-10-28: "hold it lower in a run"): by RUN_LOWER of how far the forearm points up past the rest (the bend, and the swing
+ * forward), times how much of a run it is (the bend past the walk's, over the run's 0.7). A walk and a stand keep the plain hold, and
+ * the arm's back swing is never lowered (the blade would reach the ground).
  */
 const HOLD_UP = -0.1;
 export const HOLDS: Record<string, { turn: readonly [number, number, number] }> = {
   shovel: { turn: [Math.PI + HOLD_UP, 0, 0] },
 };
+/** The elbow's bend at rest and in a walk, and what a run adds, in the package's pose (radians). */
+export const REST_BEND = 0.12;
+export const WALK_BEND = 0.32;
+export const RUN_BEND = 0.7;
+/** How much of the forearm's lift a hand thing is turned down again in a full run. */
+export const RUN_LOWER = 0.8;
+
+/** The turn down (radians) for an elbow's bend and the upper arm's swing (`upperarm_R.rotation.x`: negative is forward). */
+export function runLower(bend: number, swing: number): number {
+  if (!Number.isFinite(bend) || !Number.isFinite(swing)) return 0;
+  const run = Math.min(1, Math.max(0, (bend - WALK_BEND) / RUN_BEND));
+  return RUN_LOWER * run * Math.max(0, bend - swing - REST_BEND);
+}
 
 /** The ink outline's colour and width (metres): the island's. */
 const INK = "#1d1530";
@@ -46,8 +64,11 @@ type Template = { scene: THREE.Group; grip: THREE.Vector3; things: (THREE.Buffer
 type Entry = { users: number; ready: Promise<Template> };
 const cache = new Map<string, Entry>();
 
-/** What `wearModel` gives: the object to hang (a copy that shares the model's geometry), and `release` to take it off. */
-export type WornModel = { object: THREE.Group; release(): void };
+/**
+ * What `wearModel` gives: the object to hang (a copy that shares the model's geometry), `hold` (each frame, for a hand thing: the elbow's
+ * bend, `-forearm_R.rotation.x`, and the upper arm's swing, `upperarm_R.rotation.x`) and `release` to take it off.
+ */
+export type WornModel = { object: THREE.Group; hold(bend: number, swing?: number): void; release(): void };
 
 /** The bytes of a model; a test gives its own. */
 export type FetchBytes = (url: string) => Promise<ArrayBuffer>;
@@ -130,13 +151,17 @@ export async function wearModel(name: string, slot: ModelSlot, ramp: THREE.Textu
   // The grip (a hand model's grip_R) on the socket's point.
   if (slot === "hand") copy.position.sub(t.grip);
   holder.add(copy);
-  const turn = HOLDS[name]?.turn;
-  if (turn) holder.rotation.set(turn[0], turn[1], turn[2]);
+  const turn = HOLDS[name]?.turn ?? [0, 0, 0];
+  holder.rotation.set(turn[0], turn[1], turn[2]);
   holder.scale.setScalar(opts.scale ?? 1);
   let done = false;
   const e = entry;
   return {
     object: holder,
+    hold(bend, swing = 0) {
+      if (slot !== "hand") return;
+      holder.rotation.x = turn[0] - runLower(bend, swing);
+    },
     release() {
       if (done) return;
       done = true;

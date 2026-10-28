@@ -7,26 +7,13 @@ import * as THREE from "three";
 import { COSMETIC_LIMITS, checkModel, modelSummary } from "@nano133/nanoterra/model";
 import { checkLooks } from "@nano133/nanoterra/looks";
 import list from "../looks.json" with { type: "json" };
-import { loadedModels, modelsOf, wearModel, type ModelSlot } from "../src/client/game/worn";
+import { REST_BEND, RUN_BEND, RUN_LOWER, WALK_BEND, loadedModels, runLower, modelsOf, wearModel, type ModelSlot } from "../src/client/game/worn";
 
 const DIR = join(import.meta.dirname, "..", "public", "looks");
 const files = readdirSync(DIR).filter((f) => f.endsWith(".glb"));
 const LOOKS = checkLooks(list);
 /** The slot of each model: the slot that a look names it in (a model in no look is checked as a hand item). */
 const slotOf = (name: string): ModelSlot => LOOKS.flatMap((l) => modelsOf(l)).find((m) => m.name === name)?.slot ?? "hand";
-
-/**
- * Rules that a model may fail for now, each with its reason. WAITING FOR A DECISION (2026-10-28): the shovel is 0.52 m wide and hangs 1.0 m
- * below its grip_R, so it is outside the hand zone that the kit's HAND_ITEM gives (0.4 x 0.4 m, from 0.3 m below the grip). Wes chooses a
- * larger hand zone, a smaller shovel, or this exception. Its grip_L (on the T-handle, 0.31 m from grip_R) is outside that zone too. Every
- * other rule (size, triangles, textures, draws, the other markers, motion) holds for it.
- */
-const EXCEPTIONS: Record<string, readonly { rule: string; fix: RegExp }[]> = {
-  shovel: [
-    { rule: "zone", fix: /^Your hand item reaches/ },
-    { rule: "markers", fix: /^grip_L stands at .* outside the zone/ },
-  ],
-};
 
 describe("the looks' models", () => {
   it("public/looks has the models", () => {
@@ -38,11 +25,9 @@ describe("the looks' models", () => {
     it(`${file} passes the kit's cosmetic check for its slot (${slotOf(name)})`, () => {
       const bytes = new Uint8Array(readFileSync(join(DIR, file)));
       const r = checkModel(bytes, COSMETIC_LIMITS[slotOf(name)]);
-      const allowed = EXCEPTIONS[name] ?? [];
-      const left = r.problems.filter((p) => !allowed.some((a) => a.rule === p.rule && a.fix.test(p.fix)));
-      expect(left, `${file}: ${modelSummary(r.facts)}`).toEqual([]);
-      // An exception must still be needed: when the model or the limits change, it goes.
-      for (const a of allowed) expect(r.problems.some((p) => p.rule === a.rule && a.fix.test(p.fix)), `${file}: the exception "${a.rule}" is no longer needed`).toBe(true);
+      // No exceptions: every model passes the plain preset of its slot.
+      expect(r.problems, `${file}: ${modelSummary(r.facts)}`).toEqual([]);
+      expect(r.ok).toBe(true);
       expect(r.facts.draws).toBeLessThanOrEqual(2);
     });
   }
@@ -121,6 +106,27 @@ describe("worn.ts: a model loads once, is shared and is freed", () => {
     expect(freed.size).toBe(4);
     expect(loadedModels()).toBe(0);
     expect(rampFreed).toBe(false);
+  });
+
+  it("hold: a hand model turns down only in a run, by RUN_LOWER of the forearm's lift; never in a walk, a stand or a back swing; a head model never", async () => {
+    const hand = await wearModel("shovel", "hand", ramp, { fetch });
+    const head = await wearModel("shovel", "head", ramp, { fetch });
+    const x0 = hand.object.rotation.x;
+    hand.hold(REST_BEND, 0);
+    expect(hand.object.rotation.x).toBeCloseTo(x0);
+    hand.hold(WALK_BEND, -0.65);
+    expect(hand.object.rotation.x, "a walk keeps the plain hold").toBeCloseTo(x0);
+    hand.hold(WALK_BEND + RUN_BEND, 1.0);
+    expect(hand.object.rotation.x, "a run's back swing is not lowered").toBeCloseTo(x0);
+    hand.hold(WALK_BEND + RUN_BEND, -1.0);
+    expect(hand.object.rotation.x).toBeCloseTo(x0 - RUN_LOWER * (WALK_BEND + RUN_BEND + 1.0 - REST_BEND));
+    expect(runLower(Number.NaN, 0)).toBe(0);
+    const h0 = head.object.rotation.x;
+    head.hold(1.02, -1);
+    expect(head.object.rotation.x).toBe(h0);
+    hand.release();
+    head.release();
+    expect(loadedModels()).toBe(0);
   });
 
   it("a model that is not there fails, and the next try loads again", async () => {

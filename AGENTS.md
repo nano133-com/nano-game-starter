@@ -57,7 +57,8 @@ npm run check      # typecheck + tests + build: run it before every commit
   `public/looks/shovel.glb`). `src/client/game/worn.ts` loads it (GLTFLoader, only when worn), shares it and frees it; the Nanoterra character
   hangs it on `socket(slot)` and the penguin on its own flipper, head or back. A hand model has an empty `grip_R` node where the hand holds it.
   `test/lookModels.test.ts` runs the package's cosmetic check (`@nano133/nanoterra/model`, `COSMETIC_LIMITS[slot]`) on every model there: never
-  add an exception to make a new model pass.
+  add an exception to make a new model pass. In a run, `hold` in `worn.ts` turns a hand model down (the elbow's bend would lift it in front of the
+  face); a back model gets the package's `hideTail` and `hideWings`.
 - Keep the first load small (no big model or sound files without a reason), and keep 60 frames a
   second on a mid-range phone: few objects, simple materials, no real-time shadows.
 

@@ -70,12 +70,14 @@ three slots of the look:
 `"hand": "shovel"` means `public/looks/shovel.glb`, held in the right hand. The game loads the model only when a player wears the look, draws
 it in the game's toon light with a thin outline, and frees it when nobody wears it (`src/client/game/worn.ts`). On the Nanoterra character it
 hangs on the package's socket (`socket("hand")`), so it follows the hand on every body. The example shovel holds its `grip_R` marker (an empty
-node where the right hand holds it) in the hand and points forward.
+node where the right hand holds it) in the hand and points forward, a little down.
 
 `npm test` checks every model in `public/looks` with the package's cosmetic check (`@nano133/nanoterra/model`): for a hand thing at most
-3,000 triangles, 1 texture of 512 px, 2 draws and 300 KB, inside 0.4 x 0.4 x 1.6 m from 0.3 m below its grip (the head and the back have their
-own sizes). No animation, no armature. The example shovel is 646 triangles, 1 draw and 48 KB, but it is wider and longer than that hand zone:
-the test names it as the one exception (`test/lookModels.test.ts`) until the zone is decided.
+3,000 triangles, 1 texture of 512 px, 2 draws and 300 KB, inside 0.96 x 0.68 m, from 1.17 m below its grip to 0.43 m above (the head and the
+back have their own sizes). No animation, no armature. The example shovel is 646 triangles, 1 draw and 48 KB, and it passes.
+
+In a run the elbow bends more and would lift a hand thing in front of the face, so the game holds it lower then (`hold` in `worn.ts`). A back
+model takes a Critter's tail and a Bee's wings off under it.
 
 ## Signing in to /admin
 
