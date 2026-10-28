@@ -64,7 +64,7 @@ A look can carry a small model: a thing in the hand, on the head or on the back.
 three slots of the look:
 
 ```json
-{ "id": "shovel", "name": "Shovel", "priceUsd": 0.5, "change": { "body": "#7b5532" }, "slots": { "hand": "shovel" } }
+{ "id": "shovel", "name": "Shovel", "priceUsd": 0.5, "change": { "body": "#f0b429" }, "slots": { "hand": "shovel" } }
 ```
 
 `"hand": "shovel"` means `public/looks/shovel.glb`, held in the right hand. The game loads the model only when a player wears the look, draws

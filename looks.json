@@ -5,5 +5,5 @@
   { "id": "berry-beanie", "name": "Berry Beanie", "priceUsd": 0.5, "change": { "body": "#e0457b", "hat": "beanie", "hatColor": "#6a2bd9" } },
   { "id": "royal", "name": "Royal", "priceUsd": 1, "change": { "body": "#7b5cff", "hat": "crown", "hatColor": "#ffd23f" } },
   { "id": "top-hat", "name": "Top Hat", "priceUsd": 1, "change": { "body": "#e9e4d8", "hat": "tophat", "hatColor": "#22242e" } },
-  { "id": "shovel", "name": "Shovel", "priceUsd": 0.5, "change": { "body": "#7b5532" }, "slots": { "hand": "shovel" } }
+  { "id": "shovel", "name": "Shovel", "priceUsd": 0.5, "change": { "body": "#f0b429" }, "slots": { "hand": "shovel" } }
 ]
