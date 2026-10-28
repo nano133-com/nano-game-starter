@@ -36,6 +36,7 @@ export class NanoterraCharacter implements Avatar {
   /** The look's models now, and a count that a slow load reads to see if the look changed meanwhile. */
   private models: { slot: ModelSlot; model: WornModel }[] = [];
   private dressing = 0;
+  private loading: Promise<unknown>[] = [];
 
   constructor(private readonly ramp: THREE.Texture) {
     this.body = createCharacter({ record: this.rec, reducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches });
@@ -58,16 +59,20 @@ export class NanoterraCharacter implements Avatar {
   private dress(look: Look) {
     const turn = ++this.dressing;
     this.release();
-    for (const { slot, name } of modelsOf(look)) {
-      // The model is in the game's metres; the socket is inside the character's group, scaled by SCALE.
+    // The model is in the game's metres; the socket is inside the character's group, scaled by SCALE.
+    this.loading = modelsOf(look).map(({ slot, name }) =>
       wearModel(name, slot, this.ramp, { scale: 1 / SCALE })
         .then((m) => {
           if (turn !== this.dressing) return m.release();
           this.models.push({ slot, model: m });
           this.body.setWorn(this.models.map((w) => ({ socket: w.slot, object: w.model.object })));
         })
-        .catch((e) => console.warn(`The look's model ${name} did not load:`, e));
-    }
+        .catch((e) => console.warn(`The look's model ${name} did not load:`, e)),
+    );
+  }
+
+  async ready() {
+    await Promise.all(this.loading);
   }
 
   release() {

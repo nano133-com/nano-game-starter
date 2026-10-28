@@ -44,7 +44,8 @@ straight to your own wallet. You change the game with your AI assistant.
 
 ## The Shelf: see and change your looks
 
-Open `/admin` and look at **Shelf**. It shows each look with a small picture, its price (and its step on the
+Open `/admin` and look at **Shelf**. It shows each look with a small picture (your own character in the look, with its hat and its model,
+drawn once when the Shelf opens: `src/client/ui/lookPreview.ts`), its price (and its step on the
 [price ladder](https://nano133.com/build/cosmetics), from 1¢ to $1), and what it has sold in your own database. Press
 **Edit the shelf** to change a name, a price, a colour or a hat, add a look, or copy one. The page checks every change with
 the rules of the looks ladder in [`@nano133/nanoterra`](https://www.npmjs.com/package/@nano133/nanoterra) (path `/looks`): at least one free look, prices in whole cents, and **a

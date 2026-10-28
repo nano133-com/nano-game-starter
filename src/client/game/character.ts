@@ -31,6 +31,8 @@ export interface Avatar {
   animate(dt: number, motion: { speed: number; airborne: boolean; verticalSpeed: number }): void;
   /** Takes off the look's models (worn.ts frees a model when nobody wears it). Call it before the character is thrown away. */
   release(): void;
+  /** Waits until the models of the look that `wear` was given are on (or failed to load): the Shelf's picture waits for it. */
+  ready(): Promise<void>;
 }
 
 /** The character for `kind`: the switch of /admin ("Game" card), which starts as game.config.json's word. */
@@ -50,6 +52,7 @@ export class Character implements Avatar {
   private readonly sockets: Record<ModelSlot, THREE.Object3D>;
   private models: WornModel[] = [];
   private dressing = 0;
+  private loading: Promise<unknown>[] = [];
 
   constructor(private readonly ramp: THREE.Texture) {
     this.bodyMat = toon("#4aa8ff", ramp);
@@ -110,15 +113,19 @@ export class Character implements Avatar {
     for (const old of [...this.hat.children]) disposeHat(old);
     const hat = buildHat(look, this.ramp);
     if (hat) this.hat.add(hat);
-    for (const { slot, name } of modelsOf(look)) {
+    this.loading = modelsOf(look).map(({ slot, name }) =>
       wearModel(name, slot, this.ramp)
         .then((m) => {
           if (turn !== this.dressing) return m.release();
           this.models.push(m);
           this.sockets[slot].add(m.object);
         })
-        .catch((e) => console.warn(`The look's model ${name} did not load:`, e));
-    }
+        .catch((e) => console.warn(`The look's model ${name} did not load:`, e)),
+    );
+  }
+
+  async ready() {
+    await Promise.all(this.loading);
   }
 
   release() {
