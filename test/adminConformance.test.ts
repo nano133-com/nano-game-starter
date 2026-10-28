@@ -2,13 +2,13 @@
 // D1 store and the whole Worker (worker.fetch). It proves the part that is the game's own: that the game reads the ADMIN cookie only, passes its real owner,
 // and that every route the handler lists is behind the guard. The pure guard has its own tests in the package.
 
-import { adminConformance, adminStoreConformance, type ConformanceHost, type StoreHarness, type Who } from "@nano133/nanoterra/admin/conformance";
+import { adminConformance, adminSigninConformance, adminStoreConformance, type ConformanceHost, type SigninHost, type StoreHarness, type Who } from "@nano133/nanoterra/admin/conformance";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { adminHandler, gameStore } from "../src/worker/admin";
 import { EXAMPLE_ADDRESS, type Env } from "../src/worker/env";
 import worker from "../src/worker/index";
 import { createSession } from "../src/worker/signin";
-import { ORIGIN } from "./api";
+import { Browser, ORIGIN, signedInWith, walletAnswer } from "./api";
 import { makeDb, testAccount } from "./helpers";
 
 let db: D1Database;
@@ -79,17 +79,26 @@ function sessions(base: string) {
         return cookie("admin", await createSession(db, owner.address, now, "wallet", "admin"));
     }
   }
-  return async (who: Who, again = false): Promise<string | null> => {
+  const get = async (who: Who, again = false): Promise<string | null> => {
     if (again && last.has(who)) return last.get(who)!;
     const made = await make(who);
     if (made) last.set(who, made);
     return made;
   };
+  /** Ends the login of the last request of this kind with the game's OWN sign-out route and the real cookie. */
+  const end = async (who: Who) => {
+    const mine = last.get(who);
+    if (!mine) return;
+    const out = await worker.fetch(new Request(`${base}/api/signout`, { method: "POST", headers: { "Content-Type": "application/json", Origin: base, Cookie: mine, "CF-Connecting-IP": `198.51.100.${(calls++ % 250) + 1}` }, body: JSON.stringify({ scope: "admin" }) }), live());
+    expect(out.status).toBe(200);
+  };
+  return { get, end };
 }
 
 const host = (base: string = ORIGIN): ConformanceHost => {
   const routes = adminHandler(live(), Date.now(), "203.0.113.1");
-  const cookieFor = sessions(base);
+  const sess = sessions(base);
+  const cookieFor = sess.get;
   return {
     routes: routes.routes,
     basePath: routes.basePath,
@@ -104,20 +113,66 @@ const host = (base: string = ORIGIN): ConformanceHost => {
       { method: "POST", path: "/api/admin/game/" },
       { method: "GET", path: "/api/admin/logins" },
     ],
+    endLogin: sess.end,
     async request(who, req) {
       // A different address for each call: the generic limit per address (120 a minute) must not be what refuses a request in this test.
       const headers = new Headers({ "CF-Connecting-IP": `198.51.100.${(calls++ % 250) + 1}`, ...req.headers });
       const cookie = await cookieFor(who, req.again);
-      if (cookie) headers.set("Cookie", cookie);
+      let path = req.path;
+      if (cookie && req.tokenAt && (who === "game_login" || who === "game_token_as_admin")) {
+        // The player's login token in a place that is not the game's cookie, and no cookie.
+        const token = cookie.slice(cookie.indexOf("=") + 1);
+        if (req.tokenAt === "bearer") headers.set("Authorization", `Bearer ${token}`);
+        else if (req.tokenAt === "header") headers.set("X-Auth-Token", token);
+        else path += `${path.includes("?") ? "&" : "?"}token=${token}&t=${token}&access_token=${token}`;
+      } else if (cookie) headers.set("Cookie", cookie);
       // While no owner address is set, the game runs with the example address (nobody's key): the admin is closed to everyone.
       const env: Env = who === "no_address" ? { DB: db, RECEIVE_ADDRESS: EXAMPLE_ADDRESS, TEST_MODE: "off" } : live();
-      return worker.fetch(new Request(`${base}${req.path}`, { method: req.method, headers, body: req.method === "GET" || req.method === "HEAD" ? undefined : req.body }), env);
+      return worker.fetch(new Request(`${base}${path}`, { method: req.method, headers, body: req.method === "GET" || req.method === "HEAD" ? undefined : req.body }), env);
     },
   };
 };
 
 describe("the package's admin conformance suite, run against this game's own sessions, store and Worker", () => {
   for (const c of adminConformance(host())) it(c.name, c.run);
+});
+
+/** The game's own sign-in chain, driven for the kit's contract: Berry Wallet or Nautilus, started for the game or for the admin, signed by the owner, finished by a browser. */
+function signinHost(way: "berry" | "nautilus"): SigninHost {
+  type Handle = { browser: Browser; start: { body: Record<string, any> }; scope: "game" | "admin" };
+  const name = (s: "game" | "admin") => (s === "admin" ? "admin" : "play");
+  return {
+    async start(scope) {
+      const browser = new Browser(ORIGIN, { "CF-IPCountry": "US", "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36" });
+      const start = await browser.call(live(), "/api/signin/start", { body: { way, scope: name(scope) } });
+      expect(start.status).toBe(200);
+      return { browser, start, scope } satisfies Handle;
+    },
+    async sign(h) {
+      await walletAnswer(live(), way, (h as Handle).start.body, owner);
+    },
+    async finish(h, as, credentials) {
+      const { browser, start, scope } = h as Handle;
+      const b = new Browser(ORIGIN);
+      if (credentials !== "other") b.jar = new Map(browser.jar);
+      if (credentials === "retyped") {
+        // The browser that started it, presenting its starter as the OTHER scope would read it: copied to the other scope's cookie name, and (for an admin request finished as the game) with the
+        // admin scope's hashing prefix put in front, the value that the game's own hashing would turn into the stored admin hash.
+        if (scope === "admin" && as === "game") b.jar.set("starter", `admin:${browser.jar.get("starter-admin")}`);
+        if (scope === "game" && as === "admin") b.jar.set("starter-admin", browser.jar.get("starter")!);
+      }
+      await b.call(live(), "/api/signin/check", { body: { id: start.body.id, way, scope: name(as) } });
+      return { admin: b.jar.has("admin"), game: b.jar.has("session") };
+    },
+    async signOutEverywhere() {
+      const admin = await signedInWith(live(), way, owner, "admin", new Browser(ORIGIN));
+      expect((await admin.call(live(), "/api/admin/signout-all", { method: "POST", body: {} })).status).toBe(200);
+    },
+  };
+}
+
+describe("the kit's sign-in chain contract, run against this game's own sign-in (Berry Wallet, Nautilus)", () => {
+  for (const way of ["berry", "nautilus"] as const) for (const c of adminSigninConformance(signinHost(way))) it(`[${way}] ${c.name}`, c.run);
 });
 
 describe("the same suite over https, where the cookies are __Host-session and __Host-admin", () => {

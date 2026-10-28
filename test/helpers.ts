@@ -10,7 +10,7 @@ import { blake2b } from "@noble/hashes/blake2.js";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import * as nanoNs from "nanocurrency-web";
 
-const MIGRATIONS = ["migrations/0001_init.sql", "migrations/0002_wallet_apps.sql", "migrations/0003_nanoterra.sql", "migrations/0004_nanoterra_record.sql", "migrations/0005_admin_logins.sql"];
+const MIGRATIONS = ["migrations/0001_init.sql", "migrations/0002_wallet_apps.sql", "migrations/0003_nanoterra.sql", "migrations/0004_nanoterra_record.sql", "migrations/0005_admin_logins.sql", "migrations/0006_signin_scope.sql"];
 
 /** A fresh, empty D1 database with the game's tables. */
 export async function makeDb(): Promise<{ db: D1Database; close: () => Promise<void> }> {

@@ -80,7 +80,7 @@ export type Way = (typeof WAYS)[number];
 /** The way a call names; Berry Wallet when it names none. Null for anything else. */
 export const wayOf = (v: unknown): Way | null => (v === undefined ? "berry" : WAYS.find((w) => w === v) ?? null);
 
-type Row = { id: string; rid: string | null; starter: string; status: string; expires_at: number; nonce: string | null; issued_at: number | null; label: string | null; account: string | null };
+type Row = { id: string; rid: string | null; starter: string; status: string; expires_at: number; nonce: string | null; issued_at: number | null; label: string | null; account: string | null; scope: string };
 
 const toRequest = (r: Row): WalletRequest => ({
   id: r.rid ?? r.id,
@@ -95,9 +95,10 @@ const toRequest = (r: Row): WalletRequest => ({
 
 /**
  * The signin package's RequestStore for one wallet app, in D1. A row's `id` is its key (NanChat's: the hash of its
- * nonce) and `rid` the browser's id. `finish` is one atomic update: waiting → signed in, once.
+ * nonce) and `rid` the browser's id. `finish` is one atomic update: waiting → signed in, once. `scope` is whose request it is ('play' or 'admin'): it is written when the request is
+ * created and read again when the browser's check delivers it (see `checkSignin`).
  */
-export function d1Requests(db: D1Database, way: Way): RequestStore {
+export function d1Requests(db: D1Database, way: Way, scope: Scope = "play"): RequestStore {
   const get = async (key: string) => {
     const r = await db.prepare("SELECT * FROM signin_requests WHERE id = ? AND way = ?").bind(key, way).first<Row>();
     return r ? toRequest(r) : null;
@@ -105,8 +106,8 @@ export function d1Requests(db: D1Database, way: Way): RequestStore {
   return {
     async create(key, r) {
       await db
-        .prepare("INSERT INTO signin_requests (id, rid, way, starter, status, expires_at, nonce, issued_at, label) VALUES (?, ?, ?, ?, 'waiting', ?, ?, ?, ?)")
-        .bind(key, r.id, way, r.starter, r.expiresAt, r.nonce ?? null, r.issuedAt ?? null, r.label ?? null)
+        .prepare("INSERT INTO signin_requests (id, rid, way, starter, status, expires_at, nonce, issued_at, label, scope) VALUES (?, ?, ?, ?, 'waiting', ?, ?, ?, ?, ?)")
+        .bind(key, r.id, way, r.starter, r.expiresAt, r.nonce ?? null, r.issuedAt ?? null, r.label ?? null, scope)
         .run();
     },
     get,
@@ -133,19 +134,20 @@ export function wallets(env: Env, req: Request, now?: () => number, admin?: { co
   // Nautilus signs its label ("ADMIN of example.com sign-in ABCD-EFGH from US"). Both texts carry the place the request started, so a person who is sent a link from elsewhere can tell.
   // (NanChat is not offered for the admin: its text must start "Login to <host>" and its docs do not say what may follow.)
   const life = admin ? { ttlMs: ADMIN_REQUEST_MS } : {};
+  const scopeName: Scope = admin ? "admin" : "play";
   const started = new Date(now?.() ?? Date.now()).toISOString().slice(11, 16);
   const adminLine = `Sign in to the ADMIN of ${url.host}. Started ${started} UTC from ${admin?.country ?? "an unknown country"}. If you did not start this, do not sign.`;
   return {
-    berry: { domain: url.host, uri: admin ? `${url.origin}/admin${admin.country ? `?from=${admin.country}` : ""}` : `${url.origin}/`, store: d1Requests(env.DB, "berry"), ...life, ...at } satisfies NanoSigninOptions,
+    berry: { domain: url.host, uri: admin ? `${url.origin}/admin${admin.country ? `?from=${admin.country}` : ""}` : `${url.origin}/`, store: d1Requests(env.DB, "berry", scopeName), ...life, ...at } satisfies NanoSigninOptions,
     nautilus: {
       site: url.host,
       siteAddress: receiveAddress(env) ?? EXAMPLE_ADDRESS,
-      store: d1Requests(env.DB, "nautilus"),
+      store: d1Requests(env.DB, "nautilus", scopeName),
       ...(admin ? { title: `ADMIN of ${url.host}`, ...(admin.country ? { note: `from ${admin.country}` } : {}), message: adminLine } : {}),
       ...life,
       ...at,
     } satisfies NautilusOptions,
-    nanchat: { host: url.host, store: d1Requests(env.DB, "nanchat"), ...life, ...at } satisfies NanchatOptions,
+    nanchat: { host: url.host, store: d1Requests(env.DB, "nanchat", scopeName), ...life, ...at } satisfies NanchatOptions,
     requestUrl: (id: string) => `${url.origin}/api/signin/nano/${id}`,
     nautilusUrl: (id: string) => `${url.origin}/api/signin/nautilus?id=${id}`,
     nanchatUrl: `${url.origin}/api/signin/nanchat`,
@@ -188,14 +190,17 @@ async function walletBody(req: Request): Promise<Record<string, unknown> | null>
 }
 
 /**
- * What kind of Berry request `id` is: an ADMIN one (`{ country }`, the country it started from or null) or the game's (undefined), read from the note that `startSignin` kept with it.
- * The wallet's GET and POST come with no cookie, so the stored note is the only way to build the same text for the same request.
+ * What kind of Berry request `id` is: an ADMIN one (`{ country }`: the country it started from, or null) or the game's (undefined). The kind is the request's stored SCOPE (written when it
+ * started): not a note that could be lost, so a request that was started for the admin always gets the admin's text, and a request with no scope is the game's. The country is read from
+ * the note `startSignin` kept ("admin:US"); it is only for the text.
+ * The wallet's GET and POST come with no cookie, so the stored row is the only way to build the same text for the same request.
  */
 async function kindOf(db: D1Database, id: string): Promise<{ country: string | null } | undefined> {
   if (!/^[0-9a-f]{32}$/.test(id)) return undefined;
-  const label = (await d1Requests(db, "berry").get(id))?.label;
-  if (typeof label !== "string" || !/^admin(:[A-Z]{2})?$/.test(label)) return undefined;
-  return { country: label.length > 5 ? label.slice(6) : null };
+  const row = await db.prepare("SELECT scope, label FROM signin_requests WHERE id = ? AND way = 'berry'").bind(id).first<{ scope: string; label: string | null }>();
+  if (!row || row.scope !== "admin") return undefined;
+  const country = typeof row.label === "string" && /^admin:[A-Z]{2}$/.test(row.label) ? row.label.slice(6) : null;
+  return { country };
 }
 
 /** Berry Wallet's GET and POST. They come from the wallet app, so there is no cookie and no Origin to check. */
@@ -267,17 +272,23 @@ export async function nanchatRoute(env: Env, req: Request, now = Date.now()): Pr
 export async function checkSignin(db: D1Database, req: Request, id: unknown, way: Way, nowMs = Date.now(), scope: Scope = "play", owner: string | null = null): Promise<Response> {
   if (typeof id !== "string") return fail(400, "no request id");
   const cookie = readCookie(req, STARTER_COOKIE[scope]);
-  const starter = cookie ? await keyOf(cookie, scope) : undefined;
+  // The starter cookie is what this game made: 32 random bytes as 64 hex characters. A value of any other shape (one with a prefix of the other scope's hashing, for example) is no starter.
+  const starter = cookie && /^[0-9a-f]{64}$/.test(cookie) ? await keyOf(cookie, scope) : undefined;
   // An admin request is delivered for a minute after it ends (the game's, for an hour as it always was).
   const o = { store: d1Requests(db, way), now: () => nowMs, ...(scope === "admin" ? { deliverMs: ADMIN_DELIVER_MS } : {}) };
   const r = way === "nautilus" ? await checkNautilus(o, id, starter) : way === "nanchat" ? await checkNanchat(o, id, starter) : await checkNanoSignin(o, id, starter);
   if (r.status !== "signedin") return json({ status: r.status });
   if (!r.mine || !r.account) return json({ status: "elsewhere" });
+  // The request must have been STARTED for the scope that is asking: a request started for the game never makes an admin login and one started for the admin never makes a game login,
+  // whatever credentials the browser presents. (An answer for another scope is "elsewhere", and the request is left as it is.)
+  const want = scope === "admin" ? "admin" : "play";
+  const started = await db.prepare("SELECT scope FROM signin_requests WHERE id = ? AND way = ?").bind(r.key ?? id, way).first<{ scope: string }>();
+  if (!started || started.scope !== want) return json({ status: "elsewhere" });
   // An admin login is for the game's own address only. A wallet that is not it makes no admin login (and does not end the owner's, which is
   // in a cookie of its own), and the request stays unused. `owner` is RECEIVE_ADDRESS, or null when none is set.
   if (scope === "admin" && r.account !== owner) return json({ status: "not_owner", address: r.account });
   // Deliver once: a second check of the same request makes no second session.
-  const once = await db.prepare("UPDATE signin_requests SET delivered = 1 WHERE id = ? AND way = ? AND delivered = 0 AND status = 'signedin'").bind(r.key ?? id, way).run();
+  const once = await db.prepare("UPDATE signin_requests SET delivered = 1 WHERE id = ? AND way = ? AND delivered = 0 AND status = 'signedin' AND scope = ?").bind(r.key ?? id, way, want).run();
   if (once.meta.changes !== 1) return json({ status: "used" });
   const token = await createSession(db, r.account, nowMs, "wallet", scope);
   // The admin's sign-in list: the time, the rough country and a short browser name of THIS browser (the one that started the request and now gets the login). Nothing else.
@@ -318,7 +329,8 @@ export type Session = { address: string; createdAt: number; via: Via | "unknown"
 export async function sessionOf(db: D1Database, req: Request, now = Date.now(), scope: Scope = "play"): Promise<Session | null> {
   const token = readCookie(req, SESSION_COOKIE[scope]);
   if (!token || !/^[0-9a-f]{64}$/.test(token)) return null;
-  const row = await db.prepare("SELECT address, created_at, via FROM sessions WHERE id_hash = ? AND expires_at > ?").bind(await keyOf(token, scope), now).first<{ address: string; created_at: number; via: string }>();
+  // The scope is checked in the row as well as in the hash: the two scopes stay apart in two ways.
+  const row = await db.prepare("SELECT address, created_at, via FROM sessions WHERE id_hash = ? AND expires_at > ? AND scope = ?").bind(await keyOf(token, scope), now, scope).first<{ address: string; created_at: number; via: string }>();
   // Only the two words this game writes are read; any other is "unknown", never a wallet login (a fail-open map would turn a stray value into a login that opens /admin).
   return row ? { address: row.address, createdAt: row.created_at, via: row.via === "wallet" || row.via === "nanoterra" ? row.via : "unknown" } : null;
 }

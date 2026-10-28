@@ -296,3 +296,94 @@ describe("Sign out everywhere", () => {
     expect(left).toEqual([{ scope: "play", n: 1 }]);
   });
 });
+
+describe("what the third security read found", () => {
+  const checkAs = (b: Browser, id: string, way: "berry" | "nautilus", scope: "play" | "admin", now?: number) => b.call(env, "/api/signin/check", { body: { id, way, scope }, now });
+
+  for (const way of ["berry", "nautilus"] as const) {
+    it(`${way}: a signature for an ADMIN request never makes a game login, even with the starter cookie retyped with the admin prefix, even later (the game's one-hour delivery does not apply)`, async () => {
+      const t0 = Date.now();
+      const admin = us();
+      const a = await start(admin, way, "admin", t0);
+      await walletAnswer(env, way, a.body, owner, t0 + 10_000);
+      const before = await sessionCount();
+      const value = admin.jar.get("starter-admin")!;
+      // The attack: put "admin:" + the admin starter in the game's starter cookie (percent-encoded too) and ask as the game.
+      for (const forged of [`admin:${value}`, encodeURIComponent(`admin:${value}`)]) {
+        const forger = new Browser(ORIGIN);
+        forger.jar.set("starter", forged);
+        for (const at of [t0 + 20_000, t0 + 30 * 60_000]) {
+          const got = await checkAs(forger, a.body.id, way, "play", at);
+          expect(got.body, `${way} at +${at - t0} ms`).toEqual({ status: "elsewhere" });
+          expect(forger.jar.has("session")).toBe(false);
+        }
+      }
+      // A starter that is not 64 hex characters is no starter at all, in either scope.
+      for (const odd of ["x", "", "g".repeat(64), "A".repeat(64), "0".repeat(63), `${"0".repeat(64)} `]) {
+        const b = new Browser(ORIGIN);
+        b.jar.set("starter", odd);
+        b.jar.set("starter-admin", odd);
+        expect((await checkAs(b, a.body.id, way, "admin")).body, JSON.stringify(odd)).toEqual({ status: "elsewhere" });
+        expect((await checkAs(b, a.body.id, way, "play")).body, JSON.stringify(odd)).toEqual({ status: "elsewhere" });
+      }
+      expect(await sessionCount()).toBe(before);
+      // The request was not used up by those tries: its own browser still gets its admin login, once.
+      expect((await checkAs(admin, a.body.id, way, "admin")).body).toEqual({ status: "signedin", address: owner.address });
+    });
+  }
+
+  it("the rows know whose request they are: an admin request has scope admin, a game request scope play, and one with no scope is the game's", async () => {
+    await start(us(), "berry", "admin");
+    await start(new Browser(), "berry", "play");
+    await start(us(), "nautilus", "admin");
+    await start(new Browser(), "nautilus", "play");
+    const rows = (await env.DB.prepare("SELECT way, scope FROM signin_requests ORDER BY way, scope").all<{ way: string; scope: string }>()).results;
+    expect(rows).toEqual([{ way: "berry", scope: "admin" }, { way: "berry", scope: "play" }, { way: "nautilus", scope: "admin" }, { way: "nautilus", scope: "play" }]);
+    await env.DB.prepare("INSERT INTO signin_requests (id, way, starter, status, expires_at) VALUES ('old', 'berry', 'x', 'waiting', 1)").run();
+    expect((await env.DB.prepare("SELECT scope FROM signin_requests WHERE id = 'old'").first<{ scope: string }>())!.scope).toBe("play");
+  });
+
+  it("Berry: the admin's text comes from the stored SCOPE, not from a note: with the note removed an admin request still gets the admin's text, and the game's text is refused for it", async () => {
+    const a = await start(us(), "berry", "admin");
+    await env.DB.prepare("UPDATE signin_requests SET label = NULL WHERE id = ?").bind(a.body.id).run();
+    const req = await berryRequest(a.body.id);
+    expect(req.uri).toBe(`${ORIGIN}/admin`);
+    const gameText = nanoSigninMessage({ ...req, uri: `${ORIGIN}/` } as never, owner.address);
+    const crossed = await walletCall(env, `/api/signin/nano/${a.body.id}`, berryAnswer(req, owner, gameText));
+    expect(crossed.status).toBe(401);
+    expect(crossed.body.message).toBe("The signed text is not this sign-in's.");
+    // A game request whose note says admin is still the game's text: the scope decides.
+    const g = await start(new Browser(), "berry", "play");
+    await env.DB.prepare("UPDATE signin_requests SET label = 'admin:US' WHERE id = ?").bind(g.body.id).run();
+    expect((await berryRequest(g.body.id)).uri).toBe(`${ORIGIN}/`);
+  });
+
+  it("Sign out everywhere also ends an admin request that the owner signed but the browser has not collected: its check makes no login; a game request is left alone", async () => {
+    for (const way of ["berry", "nautilus"] as const) {
+      const pending = us();
+      const a = await start(pending, way, "admin");
+      await walletAnswer(env, way, a.body, owner); // signed, not yet delivered
+      const gameBrowser = new Browser();
+      const g = await start(gameBrowser, way, "play");
+      await walletAnswer(env, way, g.body, owner);
+      const other = await signedInWith(env, way, owner, "admin", us());
+      expect((await other.call(env, "/api/admin/signout-all", { method: "POST", body: {} })).status).toBe(200);
+      const got = await checkAs(pending, a.body.id, way, "admin");
+      expect(got.body.status, way).not.toBe("signedin");
+      expect(pending.jar.has("admin")).toBe(false);
+      expect((await checkAs(gameBrowser, g.body.id, way, "play")).body, way).toEqual({ status: "signedin", address: owner.address });
+    }
+  });
+
+  it("a session row is read only in its own scope: an admin token whose row says play opens nothing, and a game token whose row says admin is no game login", async () => {
+    const admin = await signedInWith(env, "berry", owner, "admin", us());
+    expect((await admin.call(env, "/api/admin/summary")).status).toBe(200);
+    await env.DB.prepare("UPDATE sessions SET scope = 'play' WHERE scope = 'admin'").run();
+    expect((await admin.call(env, "/api/admin/summary")).status).toBe(401);
+    await env.DB.prepare("DELETE FROM sessions").run();
+    const player = await signedInWith(env, "berry", owner, "play");
+    expect((await player.call(env, "/api/me")).body).toMatchObject({ address: owner.address });
+    await env.DB.prepare("UPDATE sessions SET scope = 'admin'").run();
+    expect((await player.call(env, "/api/me")).body).toMatchObject({ address: null });
+  });
+});
