@@ -54,7 +54,8 @@ look that a player owns stays in the file** (it cannot be removed here).
 nothing to GitHub. When you like the draft, press **Copy looks.json** and put the text in `looks.json` in your repository, or press
 **Copy a message for my AI** and give it to your AI assistant. Push to GitHub: your game builds again and the new looks go live. If you set
 `GITHUB_REPO` (for example `your-name/your-game`) in `wrangler.jsonc`, the Shelf also links to `looks.json` on GitHub. The Shelf is part of
-the starter and you can delete it: the game does not need it.
+the admin panel, which comes from the package [`@nano133/nanoterra`](https://www.npmjs.com/package/@nano133/nanoterra) (path `/admin/panel`): the same `/admin` that any Three.js game can mount.
+This game only gives the panel what is its own: the owner address, the admin login, the looks and the wallet sign-in (`src/client/admin.ts`, `src/worker/admin.ts`).
 
 ## Sign in from Nanoterra
 

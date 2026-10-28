@@ -4,11 +4,10 @@
 import { nautilusReply } from "@nano133/signin";
 import { nanoUri, priceRaw, xnoText } from "../shared/amount";
 import { CONFIG } from "../shared/config";
-import { parsePatch, signinOn, type GameSettings, type Signin } from "../shared/gameSwitches";
+import { loadGameSettings, signinOn, type GameSettings, type Signin } from "@nano133/nanoterra/admin";
 import { lookById } from "../shared/looks";
-import { adminGuard, adminSummary } from "./admin";
+import { adminHandler, gameDefaults, gameStore } from "./admin";
 import { receiveAddress, setting, testMode, turnstileOn, type Env } from "./env";
-import { readGameSettings, saveGameSettings } from "./gameSettings";
 import { fail, json, readJson, sameOrigin, secure, visitorIp } from "./http";
 import { callback as nanoterraCallback, cancel as nanoterraCancel, confirm as nanoterraConfirm, playerOf, signinOff, start as nanoterraStart } from "./nanoterra";
 import { Busy, MAX_OPEN_PER_PLAYER, orderById, orderView, reserve, type OrderRow } from "./orders";
@@ -28,12 +27,8 @@ export { sweep };
  * the defaults: the listing and the game's page must not break because a setting could not be read.
  */
 async function settingsOf(env: Env): Promise<GameSettings> {
-  try {
-    const { character, signin } = await readGameSettings(env.DB);
-    return { character, signin };
-  } catch {
-    return { character: CONFIG.character, signin: CONFIG.signin };
-  }
+  const { character, signin } = await loadGameSettings(gameStore(env), gameDefaults);
+  return { character, signin };
 }
 
 /**
@@ -107,6 +102,9 @@ export async function handleApi(req: Request, env: Env, now = Date.now()): Promi
   const method = req.method;
 
   if (method === "OPTIONS") {
+    // The admin never answers a preflight: for a path of /api/admin the package's guard answers (401 or 403 for a visitor, 405 for the owner), with no CORS header.
+    const admin = await adminHandler(env, now, ip).handle(req);
+    if (admin) return admin;
     // CORS: only the game's own pages may call the API.
     const origin = req.headers.get("Origin");
     if (origin !== url.origin) return new Response(null, { status: 403 });
@@ -188,26 +186,10 @@ export async function handleApi(req: Request, env: Env, now = Date.now()): Promi
     return json(payView(o, env, now));
   }
 
-  if (path === "/api/admin/summary" && method === "GET") {
-    const refused = await adminGuard(env, req, now);
-    return refused ?? json(await adminSummary(env, now));
-  }
-  // The "Game" card: the two switches. The same guard as every /api/admin route, unchanged. A press changes only these two settings.
-  if (path === "/api/admin/game" && (method === "GET" || method === "POST")) {
-    const refused = await adminGuard(env, req, now);
-    if (refused) return refused;
-    if (method === "GET") return json(await readGameSettings(db));
-    if (!memoryLimit(`admin-game|${ip}`, 30, 60_000, now)) return fail(429, "Too many changes. Wait a minute.");
-    const parsed = parsePatch(await readJson(req, 512));
-    if (!parsed.ok) return fail(400, parsed.error);
-    return json(await saveGameSettings(db, parsed.patch, now));
-  }
-  if (path === "/api/admin/check" && method === "POST") {
-    const refused = await adminGuard(env, req, now);
-    if (refused) return refused;
-    const scan = await sweep(env, { at: now });
-    return json({ scan, summary: await adminSummary(env, now) });
-  }
+  // The admin: the package's handler (the guard first, then the summary, the two switches and the payment check). It answers EVERY path under /api/admin,
+  // so a visitor who is not the owner learns nothing about the routes.
+  const admin = await adminHandler(env, now, ip).handle(req);
+  if (admin) return admin;
 
   return fail(404, "No such route.");
 }

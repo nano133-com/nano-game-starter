@@ -263,13 +263,15 @@ export async function createSession(db: D1Database, address: string, now = Date.
   return token;
 }
 
-export type Session = { address: string; createdAt: number; via: Via };
+/** `via` is "unknown" for a stored word that is neither: it is never read as a wallet login (the admin guard refuses it, as it refuses anything but "wallet"). */
+export type Session = { address: string; createdAt: number; via: Via | "unknown" };
 
 export async function sessionOf(db: D1Database, req: Request, now = Date.now(), scope: Scope = "play"): Promise<Session | null> {
   const token = readCookie(req, SESSION_COOKIE[scope]);
   if (!token || !/^[0-9a-f]{64}$/.test(token)) return null;
   const row = await db.prepare("SELECT address, created_at, via FROM sessions WHERE id_hash = ? AND expires_at > ?").bind(await keyOf(token, scope), now).first<{ address: string; created_at: number; via: string }>();
-  return row ? { address: row.address, createdAt: row.created_at, via: row.via === "nanoterra" ? "nanoterra" : "wallet" } : null;
+  // Only the two words this game writes are read; any other is "unknown", never a wallet login (a fail-open map would turn a stray value into a login that opens /admin).
+  return row ? { address: row.address, createdAt: row.created_at, via: row.via === "wallet" || row.via === "nanoterra" ? row.via : "unknown" } : null;
 }
 
 export async function signOut(db: D1Database, req: Request, scope: Scope = "play"): Promise<Response> {
