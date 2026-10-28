@@ -45,6 +45,8 @@ const visit = (code: string | null, e: Env = env, ip = "203.0.113.9", fetcher?: 
   return callback(e, new Request(`${ORIGIN}/nanoterra/callback${query ? `?${query}` : ""}`, { headers }), ip, Date.now(), fetcher);
 };
 const sessionsOf = async (address: string) => (await env.DB.prepare("SELECT via FROM sessions WHERE address = ?").bind(address).all<{ via: string }>()).results;
+/** The scopes of every session row: a sign-in from Nanoterra makes PLAYER sessions only (scope "play"), never an admin one ("Sign out everywhere" and the admin guard rely on it). */
+const scopesOf = async (address: string) => (await env.DB.prepare("SELECT scope FROM sessions WHERE address = ?").bind(address).all<{ scope: string }>()).results.map((s) => s.scope);
 const sessionCount = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM sessions").first<{ n: number }>())!.n;
 /** The `name=value` pair of a cookie that a response sets, as a browser sends it back. */
 const pairOf = (res: Response, name: string) => res.headers.getSetCookie().find((c) => c.startsWith(`${name}=`))?.split(";")[0] ?? null;
@@ -113,6 +115,7 @@ describe("Sign in from Nanoterra", () => {
     expect(cookies[0]).toMatch(/^session=[0-9a-f]{64}; Path=\/; Max-Age=2592000; HttpOnly; SameSite=Lax/);
     expect(cookies[1]).toMatch(/^nanoterra-pending=; Path=\/; Max-Age=0/);
     expect((await sessionsOf(player.address)).map((s) => s.via)).toEqual(["nanoterra"]);
+    expect(await scopesOf(player.address)).toEqual(["play"]);
   });
 
   it("the browser then sees the name, the character and the address on /api/me", async () => {

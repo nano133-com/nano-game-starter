@@ -262,6 +262,20 @@ describe("the list of admin sign-ins keeps three things", () => {
   });
 });
 
+describe("who makes admin logins", () => {
+  it("a game sign-in makes only player sessions (scope play), and only a wallet signature started from /admin makes an admin one, with the word wallet", async () => {
+    for (const way of ["berry", "nautilus"] as const) await signedInWith(env, way, player, "play");
+    expect((await env.DB.prepare("SELECT scope, via FROM sessions").all<{ scope: string; via: string }>()).results).toEqual([
+      { scope: "play", via: "wallet" },
+      { scope: "play", via: "wallet" },
+    ]);
+    await signedInWith(env, "berry", owner, "admin", us());
+    const rows = (await env.DB.prepare("SELECT scope, via, address FROM sessions ORDER BY scope").all<{ scope: string; via: string; address: string }>()).results;
+    expect(rows.filter((r) => r.scope === "admin")).toEqual([{ scope: "admin", via: "wallet", address: owner.address }]);
+    expect(rows.filter((r) => r.scope === "play").length).toBe(2);
+  });
+});
+
 describe("Sign out everywhere", () => {
   it("ends every admin login (this browser's too) and no player's login; not from another site, not for a visitor", async () => {
     const a1 = await signedInWith(env, "berry", owner, "admin", us());

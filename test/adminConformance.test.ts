@@ -27,46 +27,73 @@ const live = (): Env => ({ DB: db, RECEIVE_ADDRESS: owner.address, TEST_MODE: "o
 const DAY = 24 * 60 * 60_000;
 let calls = 0;
 
-/** The game's own sessions, one for each kind of visitor the suite names. */
-async function cookieFor(who: Who): Promise<string | null> {
-  const now = Date.now();
-  switch (who) {
-    case "signed_out":
-      return null;
-    case "game_login":
-      // A login made for the game's PLAYERS (cookie `session`), the owner's own: it must NOT open the admin.
-      return `session=${await createSession(db, owner.address, now, "wallet", "play")}`;
-    case "game_token_as_admin":
-      // The token of a login made for the game's players, put in the ADMIN cookie: the admin scope's hashed keys must not match it.
-      return `admin=${await createSession(db, owner.address, now, "wallet", "play")}`;
-    case "nanoterra_login":
-      return `admin=${await createSession(db, owner.address, now, "nanoterra", "admin")}`;
-    case "unknown_via_login":
-      // An admin-scope row whose login word is none that the game writes: it must never be read as a wallet login.
-      return `admin=${await createSession(db, owner.address, now, "ticket" as never, "admin")}`;
-    case "old_valid_row": {
-      // More than a day old by its creation time, but the row's own expiry is still in the future: only the guard's age check can refuse it.
-      const made = now - DAY - 60_000 - calls++;
-      const token = await createSession(db, owner.address, made, "wallet", "admin");
-      await db.prepare("UPDATE sessions SET expires_at = ? WHERE created_at = ?").bind(now + DAY, made).run();
-      return `admin=${token}`;
+/**
+ * The game's own sessions, one for each kind of visitor the suite names. `base` is the game's origin: over https the cookies are `__Host-session` and `__Host-admin`, and the
+ * suite runs on both (the `__Host-` branch of the cookie code is the one that runs in production). `again`: the same login as the last one of this kind.
+ */
+function sessions(base: string) {
+  const prefix = base.startsWith("https:") ? "__Host-" : "";
+  const last = new Map<Who, string>();
+  const cookie = (name: "session" | "admin", token: string) => `${prefix}${name}=${token}`;
+  async function make(who: Who): Promise<string | null> {
+    const now = Date.now();
+    switch (who) {
+      case "signed_out":
+        return null;
+      case "game_login":
+        // A login made for the game's PLAYERS (cookie `session`), the owner's own: it must NOT open the admin.
+        return cookie("session", await createSession(db, owner.address, now, "wallet", "play"));
+      case "game_token_as_admin":
+        // The token of a login made for the game's players, put in the ADMIN cookie: the admin scope's hashed keys must not match it.
+        return cookie("admin", await createSession(db, owner.address, now, "wallet", "play"));
+      case "nanoterra_login":
+        return cookie("admin", await createSession(db, owner.address, now, "nanoterra", "admin"));
+      case "unknown_via_login":
+        // An admin-scope row whose login word is none that the game writes: it must never be read as a wallet login.
+        return cookie("admin", await createSession(db, owner.address, now, "ticket" as never, "admin"));
+      case "old_valid_row": {
+        // More than a day old by its creation time, but the row's own expiry is still in the future: only the guard's age check can refuse it.
+        const made = now - DAY - 60_000 - calls++;
+        const token = await createSession(db, owner.address, made, "wallet", "admin");
+        await db.prepare("UPDATE sessions SET expires_at = ? WHERE created_at = ?").bind(now + DAY, made).run();
+        return cookie("admin", token);
+      }
+      case "other_wallet":
+        return cookie("admin", await createSession(db, other.address, now, "wallet", "admin"));
+      case "expired_login": {
+        // Made an hour ago, so the guard's one-day age check would allow it, but the game's own store has expired it: only the store can refuse it.
+        const made = now - 3_600_000 - calls++;
+        const token = await createSession(db, owner.address, made, "wallet", "admin");
+        await db.prepare("UPDATE sessions SET expires_at = ? WHERE created_at = ?").bind(now - 1000, made).run();
+        return cookie("admin", token);
+      }
+      case "signed_out_login": {
+        // A login that the game's own sign-out route ended (the real route, with the real cookie).
+        const mine = cookie("admin", await createSession(db, owner.address, now, "wallet", "admin"));
+        const out = await worker.fetch(new Request(`${base}/api/signout`, { method: "POST", headers: { "Content-Type": "application/json", Origin: base, Cookie: mine, "CF-Connecting-IP": `198.51.100.${(calls++ % 250) + 1}` }, body: JSON.stringify({ scope: "admin" }) }), live());
+        expect(out.status).toBe(200);
+        return mine;
+      }
+      case "no_address":
+      case "owner":
+        return cookie("admin", await createSession(db, owner.address, now, "wallet", "admin"));
     }
-    case "other_wallet":
-      return `admin=${await createSession(db, other.address, now, "wallet", "admin")}`;
-    case "expired_login":
-      return `admin=${await createSession(db, owner.address, now - DAY - 60_000, "wallet", "admin")}`;
-    case "no_address":
-    case "owner":
-      return `admin=${await createSession(db, owner.address, now, "wallet", "admin")}`;
   }
+  return async (who: Who, again = false): Promise<string | null> => {
+    if (again && last.has(who)) return last.get(who)!;
+    const made = await make(who);
+    if (made) last.set(who, made);
+    return made;
+  };
 }
 
-const host = (): ConformanceHost => {
+const host = (base: string = ORIGIN): ConformanceHost => {
   const routes = adminHandler(live(), Date.now(), "203.0.113.1");
+  const cookieFor = sessions(base);
   return {
     routes: routes.routes,
     basePath: routes.basePath,
-    origin: ORIGIN,
+    origin: base,
     // Routes under /api/admin that an older page, or a later change, might serve. The Worker sends every path under the base to the package's handler first.
     otherRoutes: [
       { method: "GET", path: "/api/admin/orders" },
@@ -74,21 +101,27 @@ const host = (): ConformanceHost => {
       { method: "GET", path: "/api/admin/summary.json" },
       { method: "POST", path: "/api/admin/debug" },
       { method: "GET", path: "/api/admin/game/" },
+      { method: "POST", path: "/api/admin/game/" },
+      { method: "GET", path: "/api/admin/logins" },
     ],
     async request(who, req) {
       // A different address for each call: the generic limit per address (120 a minute) must not be what refuses a request in this test.
       const headers = new Headers({ "CF-Connecting-IP": `198.51.100.${(calls++ % 250) + 1}`, ...req.headers });
-      const cookie = await cookieFor(who);
+      const cookie = await cookieFor(who, req.again);
       if (cookie) headers.set("Cookie", cookie);
       // While no owner address is set, the game runs with the example address (nobody's key): the admin is closed to everyone.
       const env: Env = who === "no_address" ? { DB: db, RECEIVE_ADDRESS: EXAMPLE_ADDRESS, TEST_MODE: "off" } : live();
-      return worker.fetch(new Request(`${ORIGIN}${req.path}`, { method: req.method, headers, body: req.method === "GET" || req.method === "HEAD" ? undefined : req.body }), env);
+      return worker.fetch(new Request(`${base}${req.path}`, { method: req.method, headers, body: req.method === "GET" || req.method === "HEAD" ? undefined : req.body }), env);
     },
   };
 };
 
 describe("the package's admin conformance suite, run against this game's own sessions, store and Worker", () => {
   for (const c of adminConformance(host())) it(c.name, c.run);
+});
+
+describe("the same suite over https, where the cookies are __Host-session and __Host-admin", () => {
+  for (const c of adminConformance(host("https://game.test"))) it(`[https] ${c.name}`, c.run);
 });
 
 describe("the package's store contract, run against this game's D1 store and its real tables", () => {

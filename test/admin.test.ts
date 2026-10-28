@@ -24,7 +24,7 @@ const live = (): Env => ({ DB: db, RECEIVE_ADDRESS: owner.address, TEST_MODE: "o
 /** A player: the game's login (cookie `session`). */
 async function signedIn(address: string, ageMs = 0) {
   const b = new Browser();
-  b.jar.set("session", await createSession(db, address, Date.now() - ageMs));
+  b.jar.set("session", await createSession(db, address, Date.now() - ageMs, "wallet"));
   return b;
 }
 /** The admin login (cookie `admin`): a day long, made by a wallet signature started from /admin. */

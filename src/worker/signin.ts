@@ -291,7 +291,8 @@ export type Via = "wallet" | "nanoterra";
 /** How long a login lasts: the game's 30 days, /admin's one day. */
 export const lifeOf = (scope: Scope): number => (scope === "admin" ? ADMIN_SESSION_MS : SESSION_DAYS * 86_400_000);
 
-export async function createSession(db: D1Database, address: string, now = Date.now(), via: Via = "wallet", scope: Scope = "play"): Promise<string> {
+/** `via` has no default: a caller says how the login was made, so a new caller can never make a "wallet" login by forgetting to say. */
+export async function createSession(db: D1Database, address: string, now: number, via: Via, scope: Scope = "play"): Promise<string> {
   const token = randomHex(32);
   await db
     .prepare("INSERT INTO sessions (id_hash, address, created_at, expires_at, via, scope) VALUES (?, ?, ?, ?, ?, ?)")
