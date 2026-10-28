@@ -94,6 +94,8 @@ own looks and order looks like any signed-in player. It **never opens `/admin`**
 character** and **Players can sign in with Nanoterra**. A press saves at once: you push nothing and deploy nothing. They start from the words in
 `game.config.json` (`"character"` and `"signin"`), and a press in `/admin` wins; the Worker reads the choice at run time and keeps it in your own database
 (two rows of the `meta` table, `setting:character` and `setting:signin`). The card changes only these two settings, never a look, a price or an order.
+**The character switch needs the sign-in switch:** a player brings a Nanoterra character only by signing in from Nanoterra. With sign-in Off, no new player can bring
+one, so every new player plays as the island's first character; a player who signed in before keeps their character until that sign-in ends. The card says this under the character switch.
 Turning sign-in off changes the `signin` word of your listing file (`/nano-game.json`, kept for 60 seconds) and makes the game refuse sign-in from
 Nanoterra (`/nanoterra/start`, the callback and Continue) at once, so a link made before signs nobody in. **For a game that is listed, Nanoterra's review
 decides what Nanoterra shows:** the sign-in word is part of your listing file, and a change to a listed game's file waits for that review. The card cannot

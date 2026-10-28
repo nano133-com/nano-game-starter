@@ -36,7 +36,7 @@ export type SwitchId = "character" | "signin";
 export const SWITCHES: Record<SwitchId, { title: string; on: string; off: string }> = {
   character: {
     title: "Players use their Nanoterra character",
-    on: "On: a player who signed in from Nanoterra plays as the character they picked there. Anyone else plays as the island's first character.",
+    on: "On: a player who signs in from Nanoterra plays as the character they picked there. Anyone else plays as the island's first character.",
     off: "Off: every player plays as this game's own character (the little penguin of character.ts).",
   },
   signin: {
@@ -45,6 +45,14 @@ export const SWITCHES: Record<SwitchId, { title: string; on: string; off: string
     off: "Off: the listing file says no sign-in, and the game refuses it: a link made before still signs nobody in.",
   },
 };
+
+/**
+ * The character comes through the sign-in: only a player who signs in from Nanoterra brings one. So the character switch is shown with its dependency,
+ * and with sign-in Off it says what a player gets now (a session made before the switch went Off still carries its character until it ends).
+ */
+export const CHARACTER_NEEDS_SIGNIN = "This needs “Players can sign in with Nanoterra” to be On: only a player who signs in from Nanoterra brings a character.";
+export const CHARACTER_SIGNIN_OFF =
+  "Sign-in from Nanoterra is Off, so no new player can bring a character: every new player plays as the island's first character. A player who signed in before keeps their character until that sign-in ends.";
 
 /** What to tell the creator under the sign-in switch about Nanoterra's review. The starter cannot see that review: it says so. */
 export const REVIEW_NOTE =

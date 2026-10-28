@@ -4,7 +4,7 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { CONFIG } from "../src/shared/config";
-import { isCharacter, isSigninChoice, parsePatch, pressOf, REVIEW_NOTE, signinOn, stateOf, SWITCHES } from "../src/shared/gameSwitches";
+import { CHARACTER_NEEDS_SIGNIN, CHARACTER_SIGNIN_OFF, isCharacter, isSigninChoice, parsePatch, pressOf, REVIEW_NOTE, signinOn, stateOf, SWITCHES } from "../src/shared/gameSwitches";
 import { EXAMPLE_ADDRESS, type Env } from "../src/worker/env";
 import worker from "../src/worker/index";
 import { createSession } from "../src/worker/signin";
@@ -64,6 +64,15 @@ describe("the words of the switches (src/shared/gameSwitches.ts)", () => {
     }
     expect(REVIEW_NOTE).toContain("review decides");
     expect(REVIEW_NOTE).toContain("cannot see that review");
+  });
+
+  it("the character switch says that it needs sign-in, and says what a player gets while sign-in is Off", () => {
+    expect(CHARACTER_NEEDS_SIGNIN).toContain("Players can sign in with Nanoterra");
+    expect(CHARACTER_NEEDS_SIGNIN).toContain("to be On");
+    expect(CHARACTER_SIGNIN_OFF).toContain("island's first character");
+    expect(CHARACTER_SIGNIN_OFF).toContain("signed in before keeps their character");
+    // The sign-in switch's own title is the name that the character switch points at.
+    expect(CHARACTER_NEEDS_SIGNIN).toContain(SWITCHES.signin.title);
   });
 });
 
