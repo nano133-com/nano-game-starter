@@ -43,11 +43,43 @@ const game = new Game(
 timeEl.textContent = `${Math.floor(CONFIG.round.seconds / 60)}:${String(CONFIG.round.seconds % 60).padStart(2, "0")}`;
 $("best").textContent = game.best ? `Best: ${game.best}` : "";
 
+const pausedCard = $("paused");
+
 sheet.onOpenChange = (open) => {
-  game.paused = open;
-  game.controls.enabled = !open;
+  // The paused card keeps the round stopped when a sheet closes under it.
+  game.paused = open || !pausedCard.hidden;
+  game.controls.enabled = !open && pausedCard.hidden;
   if (open) game.controls.release();
 };
+
+// ---- leaving the page ----
+// Another tab, another window or another app (a phone) takes the page away: the round stops, the character stands
+// still, and the round stays stopped until the player taps Resume. The controls let go by themselves (controls.ts).
+// This is for a FREE round. If you make a round cost money, keep the controls' release but do not stop its clock:
+// a paid round's deadline must not move (the nano133 arcade follows the same rule).
+function pauseForLeave() {
+  if (!game.playing || !pausedCard.hidden || sheet.open) return;
+  game.paused = true;
+  game.controls.enabled = false;
+  game.controls.release();
+  pausedCard.hidden = false;
+  $("resume").focus();
+}
+
+function resume() {
+  pausedCard.hidden = true;
+  game.paused = sheet.open;
+  game.controls.enabled = !sheet.open;
+}
+
+$("resume").addEventListener("click", resume);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) pauseForLeave();
+});
+// A real blur only: a script's blur, or a focus that moves inside the page (a sheet, a field), is no leaving.
+window.addEventListener("blur", (e) => {
+  if (e.isTrusted && !document.hasFocus()) pauseForLeave();
+});
 
 // ---- looks ----
 

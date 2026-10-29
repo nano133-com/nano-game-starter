@@ -59,6 +59,10 @@ export class Game {
   private readonly clock = new THREE.Clock();
   private t = 0;
   state: GameState = "ready";
+  /** True while a round runs (not before the first Play, not after the end card). */
+  get playing() {
+    return this.state === "playing";
+  }
   /** True while a sheet (looks, sign-in, pay) is open: the clock and the character stop. */
   paused = false;
   score = 0;
