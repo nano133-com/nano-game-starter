@@ -5,7 +5,11 @@
 // - Computer: WASD or the arrow keys move, Space jumps, a mouse drag anywhere turns the camera.
 // - Leaving the page (another tab or window, a pop-up, Cmd+Tab, another app on a phone) lets everything go. The
 //   browser sends a key's "up" only to the window that has the focus, so a key that is down when you leave would
-//   otherwise stay down and the character would walk on by itself when you come back.
+//   otherwise stay down and the character would walk on by itself when you come back. `releaseWhenLost` from the
+//   kit (`@nano133/nanoterra/input`) does it: at each leave it calls `release`, and it drops key repeats until a key
+//   goes down again.
+
+import { releaseWhenLost, swallowsKeyup } from "@nano133/nanoterra/input";
 
 const STICK_RADIUS = 56;
 const TOUCH_LOOK = 0.0062;
@@ -22,8 +26,6 @@ export class Controls {
   private lookId: number | null = null;
   private lookLast = { x: 0, y: 0 };
   private keys = new Set<string>();
-  /** Set by each leave. A key REPEAT does not count until a key goes down for the first time (see `fresh`). */
-  private stale = false;
   enabled = true;
 
   constructor(
@@ -43,36 +45,12 @@ export class Controls {
       e.stopPropagation();
       this.jumpQueued = true;
     });
-    // Capture: before the key handler, so a repeat that is stale never reaches it.
-    window.addEventListener("keydown", this.fresh, true);
     window.addEventListener("keydown", this.key);
     window.addEventListener("keyup", this.key);
-    for (const type of ["blur", "focus", "pagehide"]) window.addEventListener(type, this.left);
-    document.addEventListener("visibilitychange", this.hidden);
+    // A blur, a focus, a page hide, a hidden tab, the Cmd key: let go of everything. After a leave a key repeat is dropped
+    // until a key goes down again (the key's "up" went to the other window; a late repeat would put it back).
+    releaseWhenLost(() => this.release());
   }
-
-  /** The page was left: let go of everything, and trust no repeat until a key goes down again. */
-  private left = () => {
-    this.stale = true;
-    this.release();
-  };
-
-  private hidden = () => {
-    this.stale = true;
-    if (document.hidden) this.release();
-  };
-
-  /**
-   * A repeat only says that a key was down at some time. One more repeat can arrive after the page was left, or the
-   * repeats can go on when you come back, while the key's "up" went to the other window: it would put the key back.
-   * So after a leave a repeat is dropped, and the player presses the key again to walk on. On a Mac, a key that is
-   * released while Cmd is down sends no "up" either, so Cmd lets everything go.
-   */
-  private fresh = (e: KeyboardEvent) => {
-    if (e.key === "Meta" || e.key === "OS" || e.metaKey) this.release();
-    if (!e.repeat) this.stale = false;
-    else if (this.stale) e.stopImmediatePropagation();
-  };
 
   private down = (e: PointerEvent) => {
     if (!this.enabled) return;
@@ -134,7 +112,7 @@ export class Controls {
       return;
     }
     // A browser shortcut (Cmd+W, Cmd+A) is not a move; a card over the game (`enabled` off) takes no key.
-    if (e.metaKey || !this.enabled) return;
+    if (swallowsKeyup(e) || !this.enabled) return;
     e.preventDefault();
     if (k === " " && !e.repeat) this.jumpQueued = true;
     this.keys.add(k);

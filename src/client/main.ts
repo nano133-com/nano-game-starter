@@ -3,6 +3,7 @@
 import "./style.css";
 import { CONFIG } from "../shared/config";
 import { FREE_LOOK, lookById, type Look } from "../shared/looks";
+import { pauseWhenLeft } from "@nano133/nanoterra/input";
 import { Game } from "./game/game";
 import { ApiError, get, post, type Config, type Me, type Order } from "./ui/api";
 import { h, shortAddress } from "./ui/dom";
@@ -73,13 +74,9 @@ function resume() {
 }
 
 $("resume").addEventListener("click", resume);
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) pauseForLeave();
-});
-// A real blur only: a script's blur, or a focus that moves inside the page (a sheet, a field), is no leaving.
-window.addEventListener("blur", (e) => {
-  if (e.isTrusted && !document.hasFocus()) pauseForLeave();
-});
+// The tab is hidden, or the window loses the focus to another window (a real blur: not a script's, and not a focus that moves
+// inside the page). `pauseForLeave` is safe to call twice for one leave.
+pauseWhenLeft(pauseForLeave);
 
 // ---- looks ----
 
