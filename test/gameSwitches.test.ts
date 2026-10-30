@@ -69,7 +69,7 @@ describe("the words of the switches (@nano133/nanoterra/admin)", () => {
   it("the character switch says that it needs sign-in, and says what a player gets while sign-in is Off", () => {
     expect(CHARACTER_NEEDS_SIGNIN).toContain("Players can sign in with Nanoterra");
     expect(CHARACTER_NEEDS_SIGNIN).toContain("to be On");
-    expect(CHARACTER_SIGNIN_OFF).toContain("every player plays as the island's first character");
+    expect(CHARACTER_SIGNIN_OFF).toContain("every player starts as the island's first character");
     expect(CHARACTER_SIGNIN_OFF).toContain("signed in from Nanoterra before included");
     expect(CHARACTER_SIGNIN_OFF).not.toContain("keeps their character");
     // The sign-in switch's own title is the name that the character switch points at.

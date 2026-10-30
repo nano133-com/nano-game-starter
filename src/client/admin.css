@@ -19,7 +19,8 @@ body.admin-page {
 }
 
 .admin {
-  width: min(900px, 100%);
+  /* The panel lays out by its own width: 1,120 px gives the Shelf four cards a row on a desktop. */
+  width: min(1120px, 100%);
   margin: 0 auto;
   padding: max(16px, env(safe-area-inset-top)) 16px 40px;
 }
