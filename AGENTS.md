@@ -12,8 +12,8 @@ creator's address. The Worker holds **no key**: it only reads the Nano ledger to
 
 | Path | What |
 |---|---|
-| `game.config.json` | Name, one line, creator name, listing pictures, round length, and the defaults of the two switches (`"character"`, `"signin"`). Safe to change. |
-| `src/worker/admin.ts`, `src/client/admin.ts` | The admin (`/admin`) **is the package** `@nano133/nanoterra` (paths `/admin`, `/admin/d1`, `/admin/panel`, `/admin/style.css`): the guard, the routes, the D1 store, the panel with the "Game" card (two switches kept in the `meta` table as `setting:character` and `setting:signin`), the Shelf, the orders. These two files only give the package what is this game's own: the owner, the admin session, the status, the looks and the wallet sign-in. See "Rules for looks" (the Shelf never writes) and the admin guard below. |
+| `game.config.json` | Name, one line, creator name, listing pictures, round length, the defaults of the two switches (`"character"`, `"signin"`), and `"nanoterraId"` (the game's listing id on Nanoterra, or `null`; checked in `src/shared/config.ts`). Safe to change. |
+| `src/worker/admin.ts`, `src/client/admin.ts` | The admin (`/admin`) **is the package** `@nano133/nanoterra` (paths `/admin`, `/admin/d1`, `/admin/panel`, `/admin/style.css`): the guard, the routes, the D1 store, the panel with the "Game" card (two switches and the friends list's choice, kept in the `meta` table as `setting:character`, `setting:signin` and `setting:friends`), the Shelf, the orders. These two files only give the package what is this game's own: the owner, the admin session, the status, the looks and the wallet sign-in. See "Rules for looks" (the Shelf never writes) and the admin guard below. |
 | `looks.json` | The looks: `id`, `name`, `priceUsd`, and `change` (`body` colour, optional `hat` and `hatColor`), and optional `slots` (a model in `head`, `hand` or `back`). Safe to change, with the rules below. |
 | `public/looks/` | The looks' models (`.glb`). Each passes `test/lookModels.test.ts`. |
 | `src/client/game/` | The game: `world.ts` (the level), `character.ts` (what a character does, and the penguin), `nanoterraCharacter.ts` (the Nanoterra character), `hat.ts`, `gems.ts`, `controls.ts` (keys and thumbs; they let go when the page is left: `releaseWhenLost` from `@nano133/nanoterra/input`), `game.ts` (rules, speed, camera). `main.ts` pauses a free round when the player leaves the page (`pauseWhenLeft`, same path) and keeps it paused until Resume; a round that costs money must not stop its clock. Safe to change. |
@@ -22,6 +22,7 @@ creator's address. The Worker holds **no key**: it only reads the Nano ledger to
 | `src/worker/` | The server. Money and sign-in live here. See "Never change". |
 | `src/shared/` | Code for both sides: amounts (`amount.ts`), looks (`looks.ts`, with the rules in `@nano133/nanoterra/looks`), config, security headers. |
 | `src/worker/nanoterra.ts` | Sign in from Nanoterra (`/nanoterra/callback`, `/nanoterra/confirm`, `/nanoterra/cancel`): trades a one-time code for the player's details, shows a confirm screen, makes a session on Continue. See "Never change". |
+| `src/worker/friends.ts` | The game's own friends list (the admin's friends setting `"own"`): the package's handler (`@nano133/nanoterra/friends`) at `/api/friends` on the D1 tables of `migrations/0007_friends.sql`, with this game's directory of players (a Nanoterra username or a short address; never a full address to the browser). See "The friends list" below. |
 | `migrations/` | The database tables. Add a new numbered file; never edit an applied one. |
 | `test/` | Tests for money, records and sign-in. |
 
@@ -75,10 +76,24 @@ npm run check      # typecheck + tests + build: run it before every commit
   copy them. (The old check refused $0.07, $0.29 and $1.10: `wholeCents` fixes that.)
 - **The Shelf (`/admin`) never writes.** It edits a draft in the creator's browser and gives text to copy. Do not add a server call that
   changes `looks.json`, the database's looks or prices: an editor would give the server a new way to change data. A change of looks is a
-  change of the repository, pushed to GitHub. **The "Game" card is not the Shelf:** its two switches (`POST /api/admin/game`) write only the two
-  settings `setting:character` and `setting:signin`, behind the same admin guard; the route takes nothing else, and the package's store contract (run in
+  change of the repository, pushed to GitHub. **The "Game" card is not the Shelf:** its two switches and the friends list (`POST /api/admin/game`) write only the three
+  settings `setting:character`, `setting:signin` and `setting:friends`, behind the same admin guard; the route takes nothing else, and the package's store contract (run in
   `test/adminConformance.test.ts`) proves that saving changes no other `meta` row, order or owned look. Keep it that way: never add a looks, price, order or address field to it.
 - `GITHUB_REPO` (a setting, `owner/name`) only makes the Shelf link to `looks.json`. It is not a secret and it gives the game no GitHub access.
+
+## The friends list
+
+- The admin's **Game** card has a third choice, the friends list: `"nanoterra"` (the default), `"own"` or `"off"` (`setting:friends` in `meta`). The Worker reads
+  it in ONE place, `settingsOf` in `src/worker/admin.ts`, and gives it in `GET /api/config` as `friends`, with `nanoterraId` from `game.config.json`. Do not read it
+  anywhere else.
+- `src/client/main.ts` mounts the key once, after `/api/config` (`mountFriends`, `@nano133/nanoterra/friends/panel`, and its `style.css`), in `#friends` in the HUD's
+  right group. **Never hide it with `display: none` and never remove it:** in the `"nanoterra"` mode its window holds the player's live connection. With `"nanoterra"`
+  and no `nanoterraId` there is no key, and `/admin` says why. `whereNow()` gives the plain text that friends see; keep it short and true.
+- `/api/friends` answers only in the `"own"` mode (404 in the others). Its player is the PLAYER session (`sessionOf`, cookie `session`), **never the admin cookie**. The
+  package's handler checks the origin (a POST from the game's own page) and the limit (30 calls a minute for each player). `test/friends.test.ts` runs the package's
+  `friendsStoreConformance` on the real D1 tables, and pins the refusals.
+- The window's frame comes from `https://nano133.com` (`frame-src` in `src/shared/security.ts`). Do not add another origin for it.
+- There is no "Delete my data" yet. A page that adds one calls `friendsStore(env).forget(address)` too.
 
 ## Never change (without the creator's clear yes, and new tests)
 

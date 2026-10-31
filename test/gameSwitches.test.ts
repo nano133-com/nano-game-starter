@@ -1,4 +1,4 @@
-// The "Game" card of /admin: two switches kept in the `meta` table (the package's D1 store), read by the Worker at run time. They move the
+// The "Game" card of /admin: two switches (and the friends list, test/friends.test.ts) kept in the `meta` table (the package's D1 store), read by the Worker at run time. They move the
 // character choice and the sign-in word of the listing with no push and no deploy. The routes sit behind the SAME admin guard as every admin
 // call: this file checks each refusal again for the new routes, and that a press changes only these two settings.
 

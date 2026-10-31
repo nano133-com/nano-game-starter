@@ -4,9 +4,10 @@
 import { nautilusReply } from "@nano133/signin";
 import { nanoUri, priceRaw, xnoText } from "../shared/amount";
 import { CONFIG } from "../shared/config";
-import { loadGameSettings, signinOn, type GameSettings, type Signin } from "@nano133/nanoterra/admin";
+import { signinOn, type Signin } from "@nano133/nanoterra/admin";
 import { lookById } from "../shared/looks";
-import { adminHandler, gameDefaults, gameStore } from "./admin";
+import { adminHandler, settingsOf } from "./admin";
+import { FRIENDS_BASE, friendsHandler } from "./friends";
 import { receiveAddress, setting, testMode, turnstileOn, type Env } from "./env";
 import { fail, json, readJson, sameOrigin, secure, visitorIp } from "./http";
 import { callback as nanoterraCallback, cancel as nanoterraCancel, confirm as nanoterraConfirm, playerOf, signinOff, start as nanoterraStart } from "./nanoterra";
@@ -21,15 +22,6 @@ import { warm } from "./warm";
 if (!warm) console.warn("the signature warm-up check failed");
 
 export { sweep };
-
-/**
- * The settings now: the two switches of /admin ("Game" card), or game.config.json's words when /admin has set none. A database fault gives
- * the defaults: the listing and the game's page must not break because a setting could not be read.
- */
-async function settingsOf(env: Env): Promise<GameSettings> {
-  const { character, signin } = await loadGameSettings(gameStore(env), gameDefaults);
-  return { character, signin };
-}
 
 /**
  * The listing that Nano Island reads. It never lists looks or prices: the sale is the creator's own. `signin` is the switch of /admin (or
@@ -137,9 +129,13 @@ export async function handleApi(req: Request, env: Env, now = Date.now()): Promi
       creator: CONFIG.creator.name,
       testMode: testMode(env),
       turnstileSiteKey: turnstileOn(env) ? setting(env.TURNSTILE_SITE_KEY)! : null,
-      // The two switches of /admin: which character the players are (the game draws it), and whether sign-in from Nanoterra is on.
+      // The "Game" card of /admin: which character the players are (the game draws it), whether sign-in from Nanoterra is on, and which
+      // friends list the game shows ("nanoterra", "own" or "off").
       character: settings.character,
       nanoterraSignin: signinOn(settings.signin),
+      friends: settings.friends,
+      // The game's id on Nanoterra (game.config.json), or null: the Nanoterra friends window needs it.
+      nanoterraId: CONFIG.nanoterraId,
     });
   }
 
@@ -161,6 +157,13 @@ export async function handleApi(req: Request, env: Env, now = Date.now()): Promi
   if (method === "POST" && path === "/api/signout") return signOut(db, req, scopeOf((await readJson(req).catch((): Record<string, unknown> => ({}))).scope));
 
   const session = await sessionOf(db, req, now);
+
+  // The game's own friends list. It answers only while the admin's friends setting is "own": in the other modes /api/friends is no route (404),
+  // and the friends tables are not read. The player is the PLAYER session above (the `session` cookie), never the admin cookie.
+  if (path === FRIENDS_BASE && (await settingsOf(env)).friends === "own") {
+    const friends = await friendsHandler(env, now, ip, session?.address ?? null).handle(req);
+    if (friends) return friends;
+  }
 
   if (method === "GET" && path === "/api/me") {
     if (!session) return json({ address: null, owned: [], admin: false });
@@ -186,7 +189,7 @@ export async function handleApi(req: Request, env: Env, now = Date.now()): Promi
     return json(payView(o, env, now));
   }
 
-  // The admin: the package's handler (the guard first, then the summary, the two switches and the payment check). It answers EVERY path under /api/admin,
+  // The admin: the package's handler (the guard first, then the summary, the "Game" card and the payment check). It answers EVERY path under /api/admin,
   // so a visitor who is not the owner learns nothing about the routes.
   const admin = await adminHandler(env, now, ip).handle(req);
   if (admin) return admin;

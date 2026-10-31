@@ -1,4 +1,4 @@
-// The creator's admin page: the package's panel (@nano133/nanoterra/admin/panel), drawn into #admin-panel. The panel shows the game's two switches, its
+// The creator's admin page: the package's panel (@nano133/nanoterra/admin/panel), drawn into #admin-panel. The panel shows the game's two switches and friends list, its
 // numbers, the Shelf, the orders and the looks that players own; only the game's receive address can read any of it (the Worker checks it on every call).
 // This file gives the panel what only this game has: its looks (and their pictures, ui/lookPreview.ts), its wallet sign-in for the ADMIN login, and how
 // to sign out of it.

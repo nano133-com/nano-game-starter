@@ -8,5 +8,6 @@
   "ages": "18+",
   "signin": "exchange",
   "character": "nanoterra",
+  "nanoterraId": null,
   "round": { "seconds": 60, "gems": 10, "goldEvery": 8 }
 }

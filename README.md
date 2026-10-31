@@ -128,10 +128,10 @@ To switch it on:
 What a player signed in from Nanoterra gets here: a session for the address Nanoterra named. It can show the player's name,
 own looks and order looks like any signed-in player. It **never opens `/admin`**: only a wallet signature does.
 
-**Two switches in `/admin` (the "Game" card).** Open `/admin` and look at **Game**. It has two switches: **Players use their Nanoterra
+**Two switches in `/admin` (the "Game" card).** Open `/admin` and look at **Game**. It has two switches (and the friends list's choice, see "The friends list"): **Players use their Nanoterra
 character** and **Players can sign in with Nanoterra**. A press saves at once: you push nothing and deploy nothing. They start from the words in
 `game.config.json` (`"character"` and `"signin"`), and a press in `/admin` wins; the Worker reads the choice at run time and keeps it in your own database
-(two rows of the `meta` table, `setting:character` and `setting:signin`). The card changes only these two settings, never a look, a price or an order.
+(rows of the `meta` table: `setting:character`, `setting:signin`, and `setting:friends` for the friends list). The card changes only these settings, never a look, a price or an order.
 **The character switch needs the sign-in switch:** a player brings a Nanoterra character only by signing in from Nanoterra. **With sign-in Off, every player plays as the island's first
 character**, a player who signed in from Nanoterra before included: Off means Off (the page ignores the session's character while the switch is Off, `src/client/ui/player.ts`). The card says this
 under the character switch.
@@ -159,6 +159,31 @@ callback: that comparison is what protects your players.
 
 Use the details only to sign the player in to your game (Nanoterra's Terms). Your own records of them are yours to protect; Nanoterra
 cannot delete them for the player.
+
+## The friends list
+
+The game has a **Friends** key in the top bar, next to Looks. The **Game** card of `/admin` chooses which list it opens ("Friends list";
+a press saves at once, kept in the `meta` table as `setting:friends`):
+
+| Choice | What the player gets |
+|---|---|
+| **Nanoterra** (the default) | their Nanoterra friends, in a small nano133.com window in the game. Their friends see "Playing <your game>" and where they are. The friends stay on nano133.com: your game gets none of them. |
+| **The game's own** | a friends list of your own players, kept in your own database (the tables `friend_edges`, `friend_presence` and `friend_prefs`, migration `0007_friends.sql`). Players add each other by Nanoterra name, or by address (the part after `nano_`). Nanoterra friends do not show. |
+| **Off** | no key. |
+
+**Nanoterra's window needs your game's id on Nanoterra.** Nanoterra gives it when it lists your game (the launch page, step 6). Put it in
+`game.config.json` as `"nanoterraId"` (for example `"nanoterraId": "my-game"`; the template has `null`). Until it is there, the game draws no
+Friends key in this mode and `/admin` shows a line that says so. nano133.com shows the window only on a listed game's own address, so on your
+computer (`npm run dev`) the window stays empty: that is expected.
+
+The parts: the key and the panel are the package's (`mountFriends` from `@nano133/nanoterra/friends/panel`, in `src/client/main.ts`); the game's own
+list is the package's handler at `/api/friends` (`src/worker/friends.ts`), which answers only while the choice is "The game's own" (404 otherwise). It
+uses the game's sign-in (the player's own session, never the `/admin` login), refuses a call from another site and counts 30 calls a minute for
+each player. The game tells friends where the player is in plain words ("Playing a round", "Looking at looks"); change them in `whereNow()` in
+`src/client/main.ts`. A friends panel that is open pauses a round, as a sheet does.
+
+This starter has no "Delete my data" page. If you add one, call `friendsStore(env).forget(address)` (`src/worker/friends.ts`) from it, so the
+player's friends rows go too.
 
 ## What it costs
 
@@ -202,7 +227,7 @@ The tests use a fake Nano node and keys made in the test: no network and no mone
 
 | File | What |
 |---|---|
-| `game.config.json` | The game's name, its one line, your name, the round's length, and the character switch (`"character": "nanoterra"` or `"own"`) |
+| `game.config.json` | The game's name, its one line, your name, the round's length, the character switch (`"character": "nanoterra"` or `"own"`), and your game's id on Nanoterra (`"nanoterraId"`, `null` until Nanoterra lists your game; the friends list needs it, see "The friends list") |
 | `looks.json` | The looks, their prices in US dollars and what they change |
 | `public/looks/` | The looks' own 3D models (`.glb`), named in a look's `slots` |
 | `src/client/game/` | The 3D game: the island (`world.ts`), the character, the gems, the rules (`game.ts`) |

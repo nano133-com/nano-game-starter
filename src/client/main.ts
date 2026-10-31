@@ -4,6 +4,8 @@ import "./style.css";
 import { CONFIG } from "../shared/config";
 import { FREE_LOOK, isOutfit, outfitById, type Look, type Outfit } from "../shared/looks";
 import { pauseWhenLeft } from "@nano133/nanoterra/input";
+import { mountFriends, type MountedFriends } from "@nano133/nanoterra/friends/panel";
+import "@nano133/nanoterra/friends/style.css";
 import { Game } from "./game/game";
 import { ApiError, get, post, type Config, type Me, type Order } from "./ui/api";
 import { h, shortAddress } from "./ui/dom";
@@ -38,6 +40,7 @@ const game = new Game(
       $("end-best").textContent = isBest ? "A new best!" : `Best: ${best}`;
       end.hidden = false;
       $("again").focus();
+      showWhere();
     },
   },
 );
@@ -46,11 +49,51 @@ $("best").textContent = game.best ? `Best: ${game.best}` : "";
 
 const pausedCard = $("paused");
 
+// ---- the friends list ----
+// The admin's friends setting (GET /api/config): Nanoterra's friends in nano133's window, the game's own players (/api/friends), or none.
+// The key is mounted once, at the start, and stays: in the "nanoterra" mode its window holds the player's live connection (never hide it with
+// display: none, never remove it). `where` is plain text that the player's friends see.
+let friends: MountedFriends | null = null;
+let friendsOpen = false;
+let atLooks = false;
+
+function whereNow(): string {
+  if (atLooks) return "Looking at looks";
+  if (game.playing) return "Playing a round";
+  return end.hidden ? "On the start screen" : "Between rounds";
+}
+
+function showWhere() {
+  friends?.setWhere(whereNow());
+}
+
+/** A sheet or the friends panel over the game stops a free round, as the paused card does. */
+function holdGame() {
+  const held = sheet.open || friendsOpen;
+  game.paused = held || !pausedCard.hidden;
+  game.controls.enabled = !held && pausedCard.hidden;
+  if (held) game.controls.release();
+}
+
+function startFriends() {
+  const mode = config.friends ?? "off";
+  // Nanoterra's window needs the game's id there (game.config.json "nanoterraId"): with none, there is no key (/admin says so).
+  if (mode === "off" || (mode === "nanoterra" && !config.nanoterraId)) return;
+  const root = $("friends");
+  friends = mountFriends(root, { mode, game: config.nanoterraId ?? "", base: "/api/friends", where: whereNow() });
+  const panel = root.querySelector<HTMLElement>(".n133f-panel");
+  if (panel)
+    new MutationObserver(() => {
+      friendsOpen = panel.dataset.open === "true";
+      holdGame();
+    }).observe(panel, { attributes: true, attributeFilter: ["data-open"] });
+}
+
 sheet.onOpenChange = (open) => {
   // The paused card keeps the round stopped when a sheet closes under it.
-  game.paused = open || !pausedCard.hidden;
-  game.controls.enabled = !open && pausedCard.hidden;
-  if (open) game.controls.release();
+  if (!open) atLooks = false;
+  holdGame();
+  showWhere();
 };
 
 // ---- leaving the page ----
@@ -59,7 +102,7 @@ sheet.onOpenChange = (open) => {
 // This is for a FREE round. If you make a round cost money, keep the controls' release but do not stop its clock:
 // a paid round's deadline must not move (the nano133 arcade follows the same rule).
 function pauseForLeave() {
-  if (!game.playing || !pausedCard.hidden || sheet.open) return;
+  if (!game.playing || !pausedCard.hidden || sheet.open || friendsOpen) return;
   game.paused = true;
   game.controls.enabled = false;
   game.controls.release();
@@ -69,8 +112,7 @@ function pauseForLeave() {
 
 function resume() {
   pausedCard.hidden = true;
-  game.paused = sheet.open;
-  game.controls.enabled = !sheet.open;
+  holdGame();
 }
 
 $("resume").addEventListener("click", resume);
@@ -113,6 +155,7 @@ function showLooks(refresh = true) {
       })
       .catch(() => null);
   }
+  atLooks = true;
   sheet.show(
     "Looks",
     looksView({
@@ -131,6 +174,7 @@ function showLooks(refresh = true) {
 async function buy(look: Look) {
   if (!me.address) return showSignIn(() => buy(look));
   const box = h("div", {}, h("p", { class: "status" }, "Making your order…"), h("div", { class: "turnstile", hidden: true }));
+  atLooks = true;
   sheet.show(`Buy ${look.name}`, box);
   try {
     const turnstile = await personCheck(config.turnstileSiteKey, box.lastElementChild as HTMLElement);
@@ -152,6 +196,7 @@ function showPay(order: Order, look: Look) {
     if (isOutfit(look)) wear(look);
     renderAccount();
   });
+  atLooks = true;
   sheet.show(`Buy ${look.name}`, view.node, view.stop);
 }
 
@@ -208,10 +253,12 @@ function showAccount() {
 $("play").addEventListener("click", () => {
   start.hidden = true;
   game.start();
+  showWhere();
 });
 $("again").addEventListener("click", () => {
   end.hidden = true;
   game.start();
+  showWhere();
 });
 $("end-looks").addEventListener("click", () => showLooks());
 $("looks-btn").addEventListener("click", (e) => {
@@ -236,4 +283,5 @@ accountBtn.addEventListener("click", () => {
   if (config.character) game.setCharacter(config.character);
   renderAccount();
   dress();
+  startFriends();
 })();

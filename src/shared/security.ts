@@ -5,6 +5,9 @@
 /** Turnstile (Cloudflare's free check that a visitor is a person) loads from here. */
 export const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
 
+/** Nanoterra's friends window (the admin's friends setting "nanoterra") is a frame from here: `/embed/friends?game=<id>&v=1`. */
+export const NANOTERRA_ORIGIN = "https://nano133.com";
+
 export const CONTENT_SECURITY_POLICY = [
   "default-src 'none'",
   `script-src 'self' ${TURNSTILE_ORIGIN}`,
@@ -12,7 +15,7 @@ export const CONTENT_SECURITY_POLICY = [
   "img-src 'self' data: blob:",
   "font-src 'self'",
   "connect-src 'self'",
-  `frame-src ${TURNSTILE_ORIGIN}`,
+  `frame-src ${TURNSTILE_ORIGIN} ${NANOTERRA_ORIGIN}`,
   "manifest-src 'self'",
   "media-src 'self'",
   "base-uri 'none'",

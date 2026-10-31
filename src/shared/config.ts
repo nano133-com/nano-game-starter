@@ -15,6 +15,11 @@ export type GameConfig = {
   /** Which character the player is: "nanoterra" (the Nanoterra island character, in the look the player has there) or "own" (the penguin of character.ts). */
   character: "nanoterra" | "own";
   round: { seconds: number; gems: number; goldEvery: number };
+  /**
+   * The game's id on Nanoterra (its listing's id, for example "gem-island"), or null. Nanoterra gives it when it lists the game. The friends list's
+   * Nanoterra window needs it (`/embed/friends?game=<id>`): with none, the game draws no Friends key in the "nanoterra" mode.
+   */
+  nanoterraId: string | null;
 };
 
 function check(c: any): GameConfig {
@@ -30,6 +35,12 @@ function check(c: any): GameConfig {
     if (typeof v !== "number" || !Number.isInteger(v) || v < min || v > max) throw new Error(`game.config.json: "${what}" must be a whole number from ${min} to ${max}`);
     return v;
   };
+  const listingId = (v: unknown) => {
+    if (v === undefined || v === null) return null;
+    // The same shape as Nanoterra's listing ids: lower-case letters, digits and hyphens, 1 to 50 characters, no hyphen at either end.
+    if (typeof v !== "string" || !/^[a-z0-9](?:[a-z0-9-]{0,48}[a-z0-9])?$/.test(v)) throw new Error('game.config.json: "nanoterraId" must be null or your game\'s id on Nanoterra, for example "my-game"');
+    return v;
+  };
   if (!Array.isArray(c?.regions) || !c.regions.every((r: unknown) => typeof r === "string")) throw new Error('game.config.json: "regions" must be a list of words, for example ["Global"]');
   return {
     name: text(c.name, "name", 60),
@@ -42,6 +53,7 @@ function check(c: any): GameConfig {
     signin: c.signin === "ticket" || c.signin === "none" ? c.signin : "exchange",
     character: c.character === "own" ? "own" : "nanoterra",
     round: { seconds: n(c.round?.seconds, "round.seconds", 10, 600), gems: n(c.round?.gems, "round.gems", 1, 40), goldEvery: n(c.round?.goldEvery, "round.goldEvery", 2, 100) },
+    nanoterraId: listingId(c.nanoterraId),
   };
 }
 

@@ -5,7 +5,7 @@
 // the game's own: the owner (receiveAddress), and the session (sessionOf with the "admin" scope, the admin cookie only). test/adminConformance.test.ts runs
 // the package's conformance suite against exactly that chain.
 
-import { createAdminHandler, type AdminHandler, type AdminStatus, type StoreSummary } from "@nano133/nanoterra/admin";
+import { createAdminHandler, loadGameSettings, type AdminHandler, type AdminStatus, type Friends, type GameSettings, type StoreSummary } from "@nano133/nanoterra/admin";
 import { createD1Store } from "@nano133/nanoterra/admin/d1";
 import { CONFIG } from "../shared/config";
 import { lookById } from "../shared/looks";
@@ -17,14 +17,24 @@ import { sweep } from "./sweep";
 
 export { ADMIN_SESSION_MS };
 
-/** What the two switches are until /admin sets them: game.config.json's words. */
+/** What the two switches are until /admin sets them: game.config.json's words. The friends list is not named: the package's default ("nanoterra") holds until /admin sets it. */
 export const gameDefaults = { character: CONFIG.character, signin: CONFIG.signin } as const;
 
-/** The admin's store: this game's D1 tables (meta, orders, owned, and admin_logins for the sign-in list). It writes the two settings, and deletes the admin sessions for "Sign out everywhere". */
+/** The admin's store: this game's D1 tables (meta, orders, owned, and admin_logins for the sign-in list). It writes the "Game" card's settings (character, sign-in, friends list), and deletes the admin sessions for "Sign out everywhere". */
 export const gameStore = (env: Env) => createD1Store(env.DB, { logins: true });
 
+/**
+ * The settings now: the "Game" card of /admin (the two switches and the friends list), or game.config.json's words when /admin has set none
+ * (the friends list: the package's default, "nanoterra"). A database fault gives the defaults: the listing and the game's page must not break
+ * because a setting could not be read. This is the ONE place the Worker reads them.
+ */
+export async function settingsOf(env: Env): Promise<Required<GameSettings>> {
+  const { character, signin, friends } = await loadGameSettings(gameStore(env), gameDefaults);
+  return { character, signin, friends };
+}
+
 /** What only this game knows: its address, test mode and what is still off. The counts come from the store. */
-function adminStatus(env: Env, s: StoreSummary): AdminStatus {
+function adminStatus(env: Env, s: StoreSummary, friends: Friends): AdminStatus {
   const warnings: string[] = [];
   if (testMode(env)) warnings.push(receiveAddress(env) ? "Test mode is on (TEST_MODE). Pay screens say TEST MODE: DO NOT PAY." : "Test mode: no receive address is set.");
   if (!turnstileOn(env))
@@ -36,6 +46,8 @@ function adminStatus(env: Env, s: StoreSummary): AdminStatus {
   if (!setting(env.NODE_API_KEY)) warnings.push("No NODE_API_KEY: payments are checked on public Nano nodes only, which promise no uptime.");
   if (s.counts.paid_late === 1) warnings.push('1 payment came late. Send it back by hand from your wallet (see "Paid late").');
   if (s.counts.paid_late > 1) warnings.push(`${s.counts.paid_late} payments came late. Send each one back by hand from your wallet (see "Paid late").`);
+  // Nanoterra's friends window needs the game's id there; until it is set the game draws no Friends key.
+  if (friends === "nanoterra" && !CONFIG.nanoterraId) warnings.push('Friends list: add "nanoterraId" to game.config.json (your game\'s id on Nanoterra) after Nanoterra lists your game.');
   return {
     address: receiveAddress(env),
     testMode: testMode(env),
@@ -54,7 +66,7 @@ export function adminHandler(env: Env, now: number, ip: string): AdminHandler {
     owner: receiveAddress(env),
     // Only the ADMIN login (its own cookie, made by a wallet signature started from /admin): a login made for the game, even the owner's own, is not one.
     session: (req, at) => sessionOf(env.DB, req, at, "admin"),
-    status: (_at, s) => adminStatus(env, s),
+    status: async (_at, s) => adminStatus(env, s, (await settingsOf(env)).friends),
     lookName: (id) => lookById(id)?.name,
     check: (at) => sweep(env, { at }),
     limit: (key, limit, windowMs, at) => memoryLimit(`${key}|${ip}`, limit, windowMs, at),

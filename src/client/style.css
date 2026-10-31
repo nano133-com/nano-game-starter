@@ -241,6 +241,43 @@ body {
   transform: translate(-50%, -50%);
 }
 
+/* ---- the Friends key (@nano133/nanoterra/friends/panel) ----
+   It sits in the HUD's right group, before Looks: away from the thumbstick (left half), the camera drag and Jump (bottom right). The kit's
+   own sheet opens from the bottom on a phone held upright and from the right on a wide or sideways screen, over the game. */
+
+.friends {
+  --n133-font: var(--font);
+  --n133-ink: var(--ink);
+  --n133-ink-soft: var(--ink-soft);
+  --n133-paper: var(--paper);
+  --n133-line: var(--line);
+  --n133-gem: var(--gem);
+  --n133-gem-dark: var(--gem-dark);
+  --n133-radius: var(--radius);
+  display: contents;
+}
+
+#friends .n133f-key {
+  border: 0;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 4px 14px rgba(10, 30, 60, 0.18);
+}
+
+/* A narrow phone: the key shows its icon and badge only. The word stays for screen readers (the key's name). */
+@media (max-width: 480px) {
+  #friends .n133f-key {
+    padding: 0 12px;
+  }
+  #friends .n133f-key-word {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
 /* ---- start and end ---- */
 
 .overlay {
