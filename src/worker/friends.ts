@@ -16,8 +16,8 @@ export const FRIENDS_BASE = "/api/friends";
 const shortAddress = (a: string) => `${a.slice(0, 10)}…${a.slice(-6)}`;
 
 /**
- * An address with or without its "nano_" (or "xrb_") prefix. The package's handler refuses a name longer than 64 characters (FRIENDS_LIMITS.nameMax),
- * and a whole nano_ address is 65: a player types the 60 characters after "nano_" (an xrb_ address, 64, also fits).
+ * An address with or without its "nano_" (or "xrb_") prefix: a whole nano_ address is 65 characters, and the package's handler takes a name of up
+ * to 80 (FRIENDS_LIMITS.nameMax, since 0.6.1).
  */
 const ADDRESS = /^(?:(?:nano|xrb)_)?([13][13456789abcdefghijkmnopqrstuwxyz]{59})$/;
 

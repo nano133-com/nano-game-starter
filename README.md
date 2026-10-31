@@ -190,7 +190,7 @@ a press saves at once, kept in the `meta` table as `setting:friends`):
 | Choice | What the player gets |
 |---|---|
 | **Nanoterra** (the default) | their Nanoterra friends, in a small nano133.com window in the game. Their friends see "Playing <your game>" and where they are. The friends stay on nano133.com: your game gets none of them. |
-| **The game's own** | a friends list of your own players, kept in your own database (the tables `friend_edges`, `friend_presence` and `friend_prefs`, migration `0007_friends.sql`). Players add each other by Nanoterra name, or by address (the part after `nano_`). Nanoterra friends do not show. |
+| **The game's own** | a friends list of your own players, kept in your own database (the tables `friend_edges`, `friend_presence` and `friend_prefs`, migration `0007_friends.sql`). Players add each other by Nanoterra name, or by address. Nanoterra friends do not show. |
 | **Off** | no key. |
 
 **Nanoterra's window needs your game's id on Nanoterra.** Nanoterra gives it when it lists your game (the launch page, step 6). Put it in

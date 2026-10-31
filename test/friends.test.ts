@@ -110,11 +110,12 @@ describe("the friends routes through the Worker", () => {
       expect(JSON.stringify(body)).not.toContain(ann.address);
       expect(JSON.stringify(body)).not.toContain(bob.address);
     }
-    // By address: the 60 characters after "nano_" (the package refuses a name over 64 characters, and a whole nano_ address is 65), and only an
-    // address of a player of this game. A stranger's address is "no such player".
+    // By address: the whole address (65 characters; the package takes 80 since 0.6.1) or the part after "nano_", and only an address of a
+    // player of this game. A stranger's address is "no such player".
     const c = await player(owner.address);
-    expect((await c.call(live(), "/api/friends", { body: { op: "request", name: ann.address } })).status).toBe(400);
-    expect((await c.call(live(), "/api/friends", { body: { op: "request", name: ann.address.slice(5).toUpperCase() } })).status).toBe(200);
+    expect((await c.call(live(), "/api/friends", { body: { op: "request", name: ann.address } })).status).toBe(200);
+    const d = await player(testAccount().address);
+    expect((await d.call(live(), "/api/friends", { body: { op: "request", name: ann.address.slice(5).toUpperCase() } })).status).toBe(200);
     expect((await c.call(live(), "/api/friends", { body: { op: "request", name: testAccount().address.slice(5) } })).status).toBe(404);
   });
 });
