@@ -33,7 +33,8 @@ straight to your own wallet. You change the game with your AI assistant.
    keys are for personal use only), and the keys of a free
    [Turnstile](https://dash.cloudflare.com/?to=/:account/turnstile) widget in `TURNSTILE_SITE_KEY` and the
    secret `TURNSTILE_SECRET`. The admin page tells you what is still off. Without a key, the game checks
-   payments on public Nano nodes.
+   payments on public Nano nodes. Optional: also
+   [stop an AI crawler that costs you money](#optional-stop-an-ai-crawler-that-costs-you-money).
 5. **Make it yours.** Open your copy on GitHub with your AI assistant (Claude Code, Codex, Cursor and
    others). Ask for a new level, new looks or new rules. It reads `AGENTS.md` first. Each change you
    push to GitHub goes live by itself. A ready prompt is in `ai/PROMPT.md`.
@@ -41,6 +42,27 @@ straight to your own wallet. You change the game with your AI assistant.
    Your game's listing file is at `https://<your game>/nano-game.json`. When the Nano Island creator
    program opens ([nano133.com/build/islands](https://nano133.com/build/islands)), Nano Island lists your
    game from that file; the sale stays with you.
+
+## Optional: stop an AI crawler that costs you money
+
+Some AI crawlers read a site all day, and the site pays for the work. On nano133.com one crawler sent about
+99% of all AI crawler requests in a week (1 million requests). Your game's files are free on Cloudflare, so you
+save less, but server calls and database reads count toward your plan's limits. This step is optional. It needs a
+domain of your own on Cloudflare.
+
+1. In the Cloudflare dashboard, open your domain, then **AI Crawl Control**, then **Metrics**. It lists each
+   crawler of the last 7 days with its requests.
+2. If one crawler sends most of the requests, block that one. Open **Security**, **Security rules**,
+   **Create rule**, **Custom rules**. Name the rule, choose **Edit expression**, and paste
+   `(http.user_agent contains "crawler-name")` with the crawler's name, for example `meta-externalagent`.
+   Choose **Block**, then **Deploy**. Cloudflare asks you to confirm.
+3. Leave the others allowed. AI search and user-request crawlers (for example `OAI-SearchBot`,
+   `PerplexityBot`, `ChatGPT-User` and `Claude-User`) are how AI assistants find and describe your game.
+   Never block `facebookexternalhit`: it makes the link previews on Facebook and Instagram.
+
+With only a `workers.dev` address you have no domain in your account, so a Cloudflare rule is not possible. Ask
+your AI assistant to make the Worker answer 403 to that crawler's name instead. To undo the rule, delete it on the
+same page.
 
 ## The Shelf: see and change your looks
 
