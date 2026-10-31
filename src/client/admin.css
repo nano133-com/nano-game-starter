@@ -38,3 +38,19 @@ body.admin-page {
   margin: 0;
   font-size: clamp(22px, 5vw, 30px);
 }
+
+/* The panel's theme key (Device, Light or Dark) sets data-n133-theme on <html> while the panel is mounted: the page around it follows. */
+html[data-n133-theme="dark"]:has(.admin-page) {
+  --ink: #e7edf5;
+  --ink-soft: #a9b5c5;
+  --paper: #171f2b;
+  --line: #303c4e;
+  --gem-dark: #3fd8b6;
+  --sea: #62bcec;
+  color-scheme: dark;
+}
+
+html[data-n133-theme="dark"]:has(.admin-page),
+html[data-n133-theme="dark"] body.admin-page {
+  background: #0f151e;
+}
