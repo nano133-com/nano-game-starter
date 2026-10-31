@@ -1,14 +1,14 @@
 // The looks list: wear a look you own, or buy one. Every look is shown with its price before any step:
 // nothing is random, and there are no loot boxes.
 
-import { LOOKS, usdText, type Look } from "../../shared/looks";
+import { OUTFITS, usdText, type Look, type Outfit } from "../../shared/looks";
 import { h } from "./dom";
 
 const HAT_WORDS: Record<string, string> = { cap: "with a cap", beanie: "with a beanie", crown: "with a crown", tophat: "with a top hat" };
 
-export function looksView(p: { owned: Set<string>; worn: string; signedIn: boolean; wear: (l: Look) => void; buy: (l: Look) => void }): HTMLElement {
+export function looksView(p: { owned: Set<string>; worn: string; signedIn: boolean; wear: (l: Outfit) => void; buy: (l: Look) => void }): HTMLElement {
   const list = h("ul", { class: "looks" });
-  for (const look of LOOKS) {
+  for (const look of OUTFITS) {
     const mine = look.priceUsd === 0 || p.owned.has(look.id);
     const swatch = h("span", { class: "swatch", "aria-hidden": "true" });
     swatch.style.background = look.change.body;

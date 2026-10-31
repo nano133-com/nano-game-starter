@@ -3,7 +3,7 @@
 
 import * as THREE from "three";
 import { CONFIG } from "../../shared/config";
-import type { Look } from "../../shared/looks";
+import type { Outfit } from "../../shared/looks";
 import { makeAvatar, type Avatar, type NanoterraPlayer } from "./character";
 import { Controls } from "./controls";
 import { Gems } from "./gems";
@@ -102,7 +102,7 @@ export class Game {
     };
   }
 
-  wear(look: Look) {
+  wear(look: Outfit) {
     this.character.wear(look);
   }
 

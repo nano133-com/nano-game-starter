@@ -14,7 +14,7 @@
 
 import * as THREE from "three";
 import { DEFAULT_RECORD, TOPS, createCharacter, fromLegacy, isLook, unpackRecord, type Character as NanoterraBody, type LookRecord } from "@nano133/nanoterra/character";
-import type { Look } from "../../shared/looks";
+import type { Outfit } from "../../shared/looks";
 import type { Avatar, NanoterraPlayer } from "./character";
 import { buildHat, disposeHat } from "./hat";
 import { modelsOf, wearModel, type ModelSlot, type WornModel } from "./worn";
@@ -32,7 +32,7 @@ export class NanoterraCharacter implements Avatar {
   readonly ground: THREE.Object3D = new THREE.Group();
   private readonly mount = new THREE.Group();
   private rec: LookRecord = DEFAULT_RECORD;
-  private shop: Look | null = null;
+  private shop: Outfit | null = null;
   /** The look's models now, and a count that a slow load reads to see if the look changed meanwhile. */
   private models: { slot: ModelSlot; model: WornModel }[] = [];
   private dressing = 0;
@@ -46,7 +46,7 @@ export class NanoterraCharacter implements Avatar {
     this.seat();
   }
 
-  wear(look: Look) {
+  wear(look: Outfit) {
     this.shop = look;
     for (const old of [...this.mount.children]) disposeHat(old);
     const hat = buildHat(look, this.ramp);
@@ -56,7 +56,7 @@ export class NanoterraCharacter implements Avatar {
   }
 
   /** The look's models on their sockets. A model that fails to load leaves the look without it. */
-  private dress(look: Look) {
+  private dress(look: Outfit) {
     const turn = ++this.dressing;
     this.release();
     // The model is in the game's metres; the socket is inside the character's group, scaled by SCALE.

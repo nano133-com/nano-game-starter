@@ -81,7 +81,8 @@ describe("the Game switches through the Worker", () => {
   it("start from game.config.json, and say so", async () => {
     const r = await (await adminIn(owner.address)).call(live(), "/api/admin/game");
     expect(r.status).toBe(200);
-    expect(r.body).toEqual({ character: CONFIG.character, signin: CONFIG.signin, fromAdmin: { character: false, signin: false } });
+    // The friends list is the package's own default ("nanoterra"): game.config.json does not name it.
+    expect(r.body).toEqual({ character: CONFIG.character, signin: CONFIG.signin, friends: "nanoterra", fromAdmin: { character: false, signin: false, friends: false } });
   });
 
   it("a press is saved, read back, and kept in two meta rows with their own prefix", async () => {

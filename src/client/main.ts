@@ -2,7 +2,7 @@
 
 import "./style.css";
 import { CONFIG } from "../shared/config";
-import { FREE_LOOK, lookById, type Look } from "../shared/looks";
+import { FREE_LOOK, isOutfit, outfitById, type Look, type Outfit } from "../shared/looks";
 import { pauseWhenLeft } from "@nano133/nanoterra/input";
 import { Game } from "./game/game";
 import { ApiError, get, post, type Config, type Me, type Order } from "./ui/api";
@@ -82,18 +82,18 @@ pauseWhenLeft(pauseForLeave);
 
 const owns = (look: Look) => look.priceUsd === 0 || me.owned.includes(look.id);
 
-function wornLook(): Look {
+function wornLook(): Outfit {
   let id: string | null = null;
   try {
     id = localStorage.getItem(WORN_KEY);
   } catch {
     // Storage may be off (a private window).
   }
-  const look = lookById(id);
+  const look = outfitById(id);
   return look && owns(look) ? look : FREE_LOOK;
 }
 
-function wear(look: Look) {
+function wear(look: Outfit) {
   game.wear(look);
   try {
     localStorage.setItem(WORN_KEY, look.id);
@@ -149,7 +149,7 @@ async function buy(look: Look) {
 function showPay(order: Order, look: Look) {
   const view = payView(order, async () => {
     me = await get<Me>("/api/me").catch(() => me);
-    wear(look);
+    if (isOutfit(look)) wear(look);
     renderAccount();
   });
   sheet.show(`Buy ${look.name}`, view.node, view.stop);

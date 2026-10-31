@@ -7,7 +7,7 @@
 import * as THREE from "three";
 import type { Look as NanoterraLook } from "@nano133/nanoterra";
 import { CONFIG } from "../../shared/config";
-import type { Look } from "../../shared/looks";
+import type { Outfit } from "../../shared/looks";
 import { HAND_HOLD } from "@nano133/nanoterra/character";
 import { buildHat, disposeHat } from "./hat";
 import { NanoterraCharacter } from "./nanoterraCharacter";
@@ -24,7 +24,7 @@ export interface Avatar {
   /** The blob shadow: put it in the scene too. (The Nanoterra character has its shadow in its body: this is empty for it.) */
   readonly ground: THREE.Object3D;
   /** The look of this game's shop (looks.json) that the player wears. */
-  wear(look: Look): void;
+  wear(look: Outfit): void;
   /** The character that the player has in Nanoterra, or null for a player who did not come from there. */
   setNanoterra(player: NanoterraPlayer | null): void;
   /** One frame. `group.position` is already where the character stands. `speed` is metres a second over the ground. */
@@ -105,7 +105,7 @@ export class Character implements Avatar {
     return this.shadow;
   }
 
-  wear(look: Look) {
+  wear(look: Outfit) {
     this.bodyMat.color.set(look.change.body);
     // The models first (a head model hangs beside the hat): they are shared, so they are released, never disposed here.
     const turn = ++this.dressing;

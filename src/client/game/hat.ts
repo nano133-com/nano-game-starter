@@ -3,11 +3,11 @@
 // character, on its head bone), so a hat is drawn once and sits on either head.
 
 import * as THREE from "three";
-import type { Look } from "../../shared/looks";
+import type { Outfit } from "../../shared/looks";
 import { toon } from "./world";
 
 /** The hat of a look, or null for a look with none. The caller puts it on a head and frees it with `disposeHat`. */
-export function buildHat(look: Look, ramp: THREE.Texture): THREE.Group | null {
+export function buildHat(look: Outfit, ramp: THREE.Texture): THREE.Group | null {
   if (!look.change.hat) return null;
   const group = new THREE.Group();
   const mat = toon(look.change.hatColor ?? "#333333", ramp);

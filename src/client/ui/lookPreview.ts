@@ -4,7 +4,7 @@
 
 import * as THREE from "three";
 import { createLookPreview } from "@nano133/nanoterra/character";
-import type { Look } from "../../shared/looks";
+import { FREE_LOOK, isOutfit, type Look } from "../../shared/looks";
 import { makeAvatar } from "../game/character";
 import { toonRamp } from "../game/world";
 
@@ -18,7 +18,8 @@ const preview = createLookPreview<Look>({
     return {
       object,
       async dress(look) {
-        avatar.wear(look);
+        // An item of the game's own wear slot shows on the character in the free outfit.
+        avatar.wear(isOutfit(look) ? look : FREE_LOOK);
         avatar.animate(0.016, { speed: 0, airborne: false, verticalSpeed: 0 });
         await avatar.ready();
       },
