@@ -23,7 +23,9 @@ While you work:
 - The player's character comes from the package @nano133/nanoterra (the character the player picked in Nanoterra). One switch picks it or the game's
   own penguin: `"character": "nanoterra"` or `"own"` in `game.config.json`. Keep that switch in that one file. The body is display only: never give a body
   a different collider, jump or reach.
-- Players sign in with Berry Wallet, NanChat or Nautilus. Keep all three.
+- Players sign in with a passkey, Berry Wallet, NanChat or Nautilus: the package @nano133/nanoterra (path /player-signin). Keep all four. The
+  shop is the package's too (path /shop): never copy its code into this game. The passkey scheme in `src/shared/scheme.ts` is frozen: ask me for my
+  game's domain before the first player, and never change it after.
 - Looks only change how the character looks. Every look shows its price. Never add random items, loot
   boxes or anything a player buys without knowing what it is.
 - Never change the `id` of a look that someone may already own.

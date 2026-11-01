@@ -28,7 +28,7 @@ export interface Env {
 /** The address that belongs to nobody (its key is all zeros): the example in wrangler.jsonc. */
 export const EXAMPLE_ADDRESS = "nano_1111111111111111111111111111111111111111111111111111hifc8npp";
 
-/** The creator's address when it is a real one, else null. */
+/** The creator's address when it is a real one, else null. (The shop checks it the same way: without one, every pay screen is in test mode.) */
 export function receiveAddress(env: Env): string | null {
   const a = (env.RECEIVE_ADDRESS ?? "").trim().toLowerCase().replace(/^xrb_/, "nano_");
   if (!a || a === EXAMPLE_ADDRESS) return null;
@@ -37,15 +37,7 @@ export function receiveAddress(env: Env): string | null {
 }
 
 /**
- * Test mode: no real address, or TEST_MODE is "on". Every pay screen then says "TEST MODE: DO NOT PAY" and
- * shows no QR code, no address and no wallet link (the Worker does not even send them).
- */
-export function testMode(env: Env): boolean {
-  return receiveAddress(env) === null || /^(on|true|1|yes)$/i.test((env.TEST_MODE ?? "").trim());
-}
-
-/**
- * An optional setting or secret (NODE_API_KEY, TURNSTILE_SECRET, TURNSTILE_SITE_KEY): its value without spaces
+ * An optional setting or secret (NANOTERRA_CLIENT_ID, NANOTERRA_SECRET, GITHUB_REPO; the shop reads its own the same way): its value without spaces
  * around it, or undefined when it is not set. The "Deploy to Cloudflare" setup page needs a value in every
  * field, so "none", "skip", "off" and "-" (in any case) also mean "not set".
  */
@@ -63,8 +55,4 @@ export function nanoterraOn(env: Env): boolean {
 export function githubRepo(env: Env): string | null {
   const r = setting(env.GITHUB_REPO);
   return r && /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/.test(r) ? r : null;
-}
-
-export function turnstileOn(env: Env): boolean {
-  return Boolean(setting(env.TURNSTILE_SECRET) && setting(env.TURNSTILE_SITE_KEY));
 }

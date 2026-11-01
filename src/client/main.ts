@@ -1,8 +1,11 @@
-// The game page: the 3D game, the HUD, and the sheets for looks, sign-in and paying.
+// The game page: the 3D game, the HUD, and the sheets for looks, sign-in and paying. The looks and pay sheets are the package's shop
+// (@nano133/nanoterra/shop/panel) and the sign-in sheet is the package's player sign-in (@nano133/nanoterra/player-signin/panel): this page gives
+// them the game's own parts (what the player owns and wears, the Turnstile check, the frozen passkey scheme) and keeps the account sheet.
 
 import "./style.css";
 import { CONFIG } from "../shared/config";
-import { FREE_LOOK, isOutfit, outfitById, type Look, type Outfit } from "../shared/looks";
+import { FREE_LOOK, isOutfit, LOOKS, outfitById, type Outfit } from "../shared/looks";
+import { SCHEME } from "../shared/scheme";
 import { pauseWhenLeft } from "@nano133/nanoterra/input";
 import { mountFriends, type MountedFriends } from "@nano133/nanoterra/friends/panel";
 import "@nano133/nanoterra/friends/style.css";
@@ -12,15 +15,16 @@ import { EMOTE_KEY_OPTION, EMOTE_OPTION_DEFS } from "@nano133/nanoterra/emotes";
 import { loadEmotes } from "@nano133/nanoterra/emotes/player";
 import { mountEmotes } from "@nano133/nanoterra/emotes/wheel";
 import "@nano133/nanoterra/emotes/style.css";
+import { mountShop, qrSvg } from "@nano133/nanoterra/shop/panel";
+import "@nano133/nanoterra/shop/style.css";
+import { mountPlayerSignin } from "@nano133/nanoterra/player-signin/panel";
+import "@nano133/nanoterra/player-signin/style.css";
 import { Game } from "./game/game";
 import { GAME_KEY, options } from "./options";
-import { ApiError, get, post, type Config, type Me, type Order } from "./ui/api";
+import { get, post, type Config, type Me } from "./ui/api";
 import { h, shortAddress } from "./ui/dom";
-import { looksView } from "./ui/looks";
-import { payView } from "./ui/pay";
 import { nanoterraPlayerOf } from "./ui/player";
 import { Sheet } from "./ui/sheet";
-import { signInView } from "./ui/signin";
 import { personCheck } from "./ui/turnstile";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -64,6 +68,8 @@ let friends: MountedFriends | null = null;
 let friendsOpen = false;
 let optionsOpen = false;
 let wheelOpen = false;
+let shopOpen = false;
+let signinOpen = false;
 let atLooks = false;
 
 function whereNow(): string {
@@ -76,9 +82,12 @@ function showWhere() {
   friends?.setWhere(whereNow());
 }
 
-/** A sheet, the friends panel, the options panel or the emote wheel over the game stops a free round, as the paused card does. */
+/** Something over the game: the account sheet, the shop, the sign-in sheet, the friends panel, the options panel or the emote wheel. */
+const covered = () => sheet.open || shopOpen || signinOpen || friendsOpen || optionsOpen || wheelOpen;
+
+/** Anything over the game stops a free round, as the paused card does. */
 function holdGame() {
-  const held = sheet.open || friendsOpen || optionsOpen || wheelOpen;
+  const held = covered();
   game.paused = held || !pausedCard.hidden;
   game.controls.enabled = !held && pausedCard.hidden;
   if (held) game.controls.release();
@@ -135,7 +144,7 @@ function startEmotes() {
     nanoterraEmotes: config.emotes ?? "on",
     options,
     // B opens the wheel only while nothing else is over the game.
-    keyAllowed: () => !(sheet.open || friendsOpen || optionsOpen) && pausedCard.hidden,
+    keyAllowed: () => !(sheet.open || shopOpen || signinOpen || friendsOpen || optionsOpen) && pausedCard.hidden,
   });
   const layer = root.querySelector<HTMLElement>(".n133e-layer");
   if (layer)
@@ -145,9 +154,8 @@ function startEmotes() {
     }).observe(layer, { attributes: true, attributeFilter: ["data-open"] });
 }
 
-sheet.onOpenChange = (open) => {
+sheet.onOpenChange = () => {
   // The paused card keeps the round stopped when a sheet closes under it.
-  if (!open) atLooks = false;
   holdGame();
   showWhere();
 };
@@ -158,7 +166,7 @@ sheet.onOpenChange = (open) => {
 // This is for a FREE round. If you make a round cost money, keep the controls' release but do not stop its clock:
 // a paid round's deadline must not move (the nano133 arcade follows the same rule).
 function pauseForLeave() {
-  if (!game.playing || !pausedCard.hidden || sheet.open || friendsOpen || optionsOpen || wheelOpen) return;
+  if (!game.playing || !pausedCard.hidden || covered()) return;
   game.paused = true;
   game.controls.enabled = false;
   game.controls.release();
@@ -178,7 +186,7 @@ pauseWhenLeft(pauseForLeave);
 
 // ---- looks ----
 
-const owns = (look: Look) => look.priceUsd === 0 || me.owned.includes(look.id);
+const owns = (look: Outfit) => look.priceUsd === 0 || me.owned.includes(look.id);
 
 function wornLook(): Outfit {
   let id: string | null = null;
@@ -200,61 +208,56 @@ function wear(look: Outfit) {
   }
 }
 
-function showLooks(refresh = true) {
-  if (refresh && me.address) {
-    // A payment may have been found while the sheet was closed (the scan runs every 10 minutes too).
-    get<Me>("/api/me")
-      .then((fresh) => {
-        const changed = fresh.owned.join() !== me.owned.join() || fresh.address !== me.address;
-        me = fresh;
-        if (changed && sheet.open && document.querySelector("dialog[open] .looks")) showLooks(false);
-      })
-      .catch(() => null);
-  }
-  atLooks = true;
-  sheet.show(
-    "Looks",
-    looksView({
-      owned: new Set(me.owned),
-      worn: wornLook().id,
-      signedIn: Boolean(me.address),
-      wear: (l) => {
-        wear(l);
-        showLooks(false);
-      },
-      buy,
-    }),
-  );
-}
-
-async function buy(look: Look) {
-  if (!me.address) return showSignIn(() => buy(look));
-  const box = h("div", {}, h("p", { class: "status" }, "Making your order…"), h("div", { class: "turnstile", hidden: true }));
-  atLooks = true;
-  sheet.show(`Buy ${look.name}`, box);
-  try {
-    const turnstile = await personCheck(config.turnstileSiteKey, box.lastElementChild as HTMLElement);
-    const order = await post<Order>("/api/orders", { lookId: look.id, turnstile });
-    showPay(order, look);
-  } catch (e) {
-    const message = e instanceof ApiError ? e.message : "The order did not start. Try again.";
-    box.replaceChildren(h("p", { class: "status" }, message), h("button", { class: "btn btn-wide", type: "button", onclick: () => showLooks() }, "Back to looks"));
-    if (e instanceof ApiError && e.status === 401) {
-      me = { address: null, owned: [], admin: false };
-      renderAccount();
-    }
-  }
-}
-
-function showPay(order: Order, look: Look) {
-  const view = payView(order, async () => {
-    me = await get<Me>("/api/me").catch(() => me);
-    if (isOutfit(look)) wear(look);
+/** Reads the player again (`/api/me`): a payment may have been found while the shop was closed (the scan runs every 10 minutes too). */
+async function refreshMe() {
+  if (!me.address) return;
+  const fresh = await get<Me>("/api/me").catch(() => null);
+  if (!fresh) return;
+  const changed = fresh.owned.join() !== me.owned.join() || fresh.address !== me.address;
+  me = fresh;
+  if (changed) {
     renderAccount();
-  });
-  atLooks = true;
-  sheet.show(`Buy ${look.name}`, view.node, view.stop);
+    shop.refresh();
+  }
 }
+
+// The Looks sheet and the pay sheet: the package's shop. The server decides every price; the sheet shows each look's price before any step,
+// and in test mode its pay sheet says "TEST MODE: DO NOT PAY" with no QR code and the wallet key off (the order's answer carries no address).
+// The game's own keys open it (`key: false`): Looks in the top bar and on the end card.
+const shop = mountShop($("app"), {
+  looks: LOOKS,
+  key: false,
+  owned: () => me.owned,
+  signedIn: () => Boolean(me.address),
+  // Buy when nobody is signed in: the sign-in sheet first. The shop's sheet is a modal dialog, so it closes while the sign-in sheet is open;
+  // the shop opens again by itself on the pay sheet (or on the looks, when the player closed the sign-in).
+  signIn: async () => {
+    shop.close();
+    return signIn();
+  },
+  worn: (look) => wornLook().id === look.id,
+  wear: (look) => {
+    if (isOutfit(look)) wear(look);
+  },
+  // A paid order gave this look: it is the player's now, and they wear it.
+  onOwned: (lookId, look) => {
+    if (!me.owned.includes(lookId)) me = { ...me, owned: [...me.owned, lookId] };
+    if (isOutfit(look)) wear(look);
+    void refreshMe();
+  },
+  personCheck: (box) => personCheck(config.turnstileSiteKey, box),
+  onOpen: () => {
+    shopOpen = atLooks = true;
+    holdGame();
+    showWhere();
+    void refreshMe();
+  },
+  onClose: () => {
+    shopOpen = atLooks = false;
+    holdGame();
+    showWhere();
+  },
+});
 
 // ---- account ----
 
@@ -271,18 +274,34 @@ function dress() {
   game.wear(wornLook());
 }
 
-function showSignIn(then?: () => void) {
-  const view = signInView(config, (signed) => {
-    me = signed;
-    renderAccount();
-    dress();
-    setTimeout(() => (then ? then() : sheet.close()), then ? 600 : 1200);
-  });
-  sheet.show("Sign in with Nano", view.node, view.stop);
+// The player's sign-in: the package's sheet (a passkey, or Berry Wallet, NanChat or Nautilus). On a preview address (*.workers.dev) it offers no
+// passkey: a passkey belongs to one domain for good, and the game moves to its own. The passkey's account comes from the FROZEN scheme
+// (src/shared/scheme.ts). The sheet opens from the account key and from the shop's Buy.
+const signinSheet = mountPlayerSignin($("app"), {
+  name: CONFIG.name,
+  scheme: SCHEME,
+  qr: (text) => h("div", { class: "signin-qr" }, qrSvg(text, "QR code to sign in with your wallet")),
+  personCheck: (box) => personCheck(config.turnstileSiteKey, box),
+});
+const signinRoot = $("app").querySelector<HTMLElement>(".n133-signin.n133s-sheet");
+if (signinRoot)
+  new MutationObserver(() => {
+    signinOpen = signinRoot.dataset.open === "true";
+    holdGame();
+  }).observe(signinRoot, { attributes: true, attributeFilter: ["data-open"] });
+
+/** Opens the sign-in sheet. True when a player is signed in after it (the page has read them again). */
+async function signIn(): Promise<boolean> {
+  const player = await signinSheet.open();
+  if (!player) return false;
+  me = await get<Me>("/api/me").catch(() => ({ address: player.address, owned: [], admin: false, via: player.via }));
+  renderAccount();
+  dress();
+  return Boolean(me.address);
 }
 
 function showAccount() {
-  if (!me.address) return showSignIn();
+  if (!me.address) return void signIn();
   const out = h("button", { class: "btn btn-wide", type: "button" }, "Sign out");
   out.addEventListener("click", async () => {
     await post("/api/signout").catch(() => null);
@@ -316,10 +335,10 @@ $("again").addEventListener("click", () => {
   game.start();
   showWhere();
 });
-$("end-looks").addEventListener("click", () => showLooks());
+$("end-looks").addEventListener("click", () => shop.open());
 $("looks-btn").addEventListener("click", (e) => {
   (e.currentTarget as HTMLElement).blur();
-  showLooks();
+  shop.open();
 });
 accountBtn.addEventListener("click", () => {
   accountBtn.blur();

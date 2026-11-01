@@ -7,9 +7,8 @@ import { createD1Friends } from "@nano133/nanoterra/friends/d1";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { CONFIG } from "../src/shared/config";
 import type { Env } from "../src/worker/env";
-import { createSession } from "../src/worker/signin";
 import { Browser } from "./api";
-import { makeDb, testAccount } from "./helpers";
+import { createSession, makeDb, testAccount } from "./helpers";
 
 let db: D1Database;
 let close: () => Promise<void>;

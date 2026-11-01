@@ -3,10 +3,9 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { EXAMPLE_ADDRESS, type Env } from "../src/worker/env";
-import { KEYED_NODE, PUBLIC_NODES } from "../src/worker/nodes";
-import { createSession } from "../src/worker/signin";
+import { KEYED_NODE, PUBLIC_NODES } from "@nano133/nanoterra/shop";
 import { Browser, ORIGIN } from "./api";
-import { makeDb, testAccount } from "./helpers";
+import { createSession, makeDb, testAccount } from "./helpers";
 
 let db: D1Database;
 let close: () => Promise<void>;

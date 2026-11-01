@@ -2,7 +2,8 @@
 // creator who skips one types "none" (or leaves a space): each must mean "not set", never a real key.
 
 import { describe, expect, it } from "vitest";
-import { setting, turnstileOn, type Env } from "../src/worker/env";
+import { turnstileOn } from "@nano133/nanoterra/shop/worker";
+import { setting, type Env } from "../src/worker/env";
 
 const env = (o: Partial<Env>) => ({ DB: null as unknown as D1Database, ...o });
 
@@ -17,6 +18,7 @@ describe("an optional setting", () => {
     expect(setting("--")).toBe("--");
   });
 
+  // Turnstile is the package's (the shop and the player's sign-in read the keys): the same words mean "not set" there.
   it("turns Turnstile on only when both of its keys are set", () => {
     expect(turnstileOn(env({ TURNSTILE_SITE_KEY: "test-site-not-real", TURNSTILE_SECRET: "test-secret-not-real" }))).toBe(true);
     expect(turnstileOn(env({ TURNSTILE_SITE_KEY: "test-site-not-real", TURNSTILE_SECRET: "none" }))).toBe(false);

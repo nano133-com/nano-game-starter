@@ -7,9 +7,8 @@ import { CONFIG } from "../src/shared/config";
 import { CHARACTER_NEEDS_SIGNIN, CHARACTER_SIGNIN_OFF, isCharacter, isSigninChoice, parsePatch, pressOf, REVIEW_NOTE, signinOn, stateOf, SWITCHES } from "@nano133/nanoterra/admin";
 import { EXAMPLE_ADDRESS, type Env } from "../src/worker/env";
 import worker from "../src/worker/index";
-import { createSession } from "../src/worker/signin";
 import { Browser, ORIGIN } from "./api";
-import { makeDb, testAccount } from "./helpers";
+import { createSession, makeDb, testAccount } from "./helpers";
 
 let db: D1Database;
 let close: () => Promise<void>;

@@ -12,6 +12,8 @@ straight to your own wallet. You change the game with your AI assistant.
   private key, so it cannot send money anywhere.
 - **Fair looks.** Every look shows its price. Nothing is random, and there are no loot boxes. A look
   never changes a score.
+- **Sign in without a password.** A passkey (Face ID, Touch ID or the device PIN, on your own domain) or a Nano wallet app (Berry
+  Wallet, NanChat, Nautilus).
 - **Phones first.** A thumbstick on the left, camera on the right. Keyboard and mouse on a computer.
 - **Options and emotes.** An Options key (camera speed, the stick's side, less motion, quality, the Jump key) and Nano Island's
   emote wheel (Wave, Cheer, Dance and eight more) for the Nanoterra character.
@@ -40,7 +42,8 @@ straight to your own wallet. You change the game with your AI assistant.
 5. **Make it yours.** Open your copy on GitHub with your AI assistant (Claude Code, Codex, Cursor and
    others). Ask for a new level, new looks or new rules. It reads `AGENTS.md` first. Each change you
    push to GitHub goes live by itself. A ready prompt is in `ai/PROMPT.md`.
-6. **Sell, and get listed.** Set `TEST_MODE` to `off`, buy a cheap look yourself, and check `/admin`.
+6. **Sell, and get listed.** Before your first player, put your game on its own domain and write that domain in
+   `src/shared/scheme.ts`, once (see [The shop and the sign-in](#the-shop-and-the-sign-in)). Set `TEST_MODE` to `off`, buy a cheap look yourself, and check `/admin`.
    Your game's listing file is at `https://<your game>/nano-game.json`. When the Nano Island creator
    program opens ([nano133.com/build/islands](https://nano133.com/build/islands)), Nano Island lists your
    game from that file; the sale stays with you.
@@ -207,7 +210,7 @@ each player. The game tells friends where the player is in plain words ("Playing
 `src/client/main.ts`. A friends panel that is open pauses a round, as a sheet does.
 
 This starter has no "Delete my data" page. If you add one, call `friendsStore(env).forget(address)` (`src/worker/friends.ts`) from it, so the
-player's friends rows go too.
+player's friends rows go too (and the sign-in's and the shop's: see [The shop and the sign-in](#the-shop-and-the-sign-in)).
 
 ## Options and emotes
 
@@ -234,9 +237,35 @@ Cloudflare serves the game's files free, with no traffic limit. You pay only for
 A domain of your own is optional (a `.com` is about $10 a year). Figures: Cloudflare's price pages,
 read on 2026-10-21; they can change.
 
+## The shop and the sign-in
+
+The Looks sheet, the pay sheet and the player's sign-in come from the package
+[`@nano133/nanoterra`](https://www.npmjs.com/package/@nano133/nanoterra) (paths `/shop` and `/player-signin`, since 0.9.0): the same code that other
+Nanoterra games use, kept up to date there. Your game does not hold a copy. `src/worker/player.ts` sets both up on your own database and settings, and
+`src/client/main.ts` draws them. Your orders, owned looks and sign-ins stay in your own database, in the same tables as before.
+
+**What stays yours:** `looks.json` (the shop sells what it lists, at its prices), `wrangler.jsonc` and your secrets (`RECEIVE_ADDRESS`, `TEST_MODE`,
+`NODE_API_KEY`, the Turnstile keys), the passkey scheme below, and the look of the page.
+
+**The passkey.** A player can sign in with a passkey (Face ID, Touch ID or the device PIN): no app to install. The passkey makes the player's Nano
+address in the browser, and the looks they buy belong to that address. Two rules keep those looks safe:
+
+- **A passkey belongs to one domain for good.** On your `*.workers.dev` address the sign-in offers the wallet apps only, and `/admin` says
+  "Passkeys turn on when your game has its own domain." Give your game its own domain before your first player; the passkey turns on there.
+- **Set your domain in `src/shared/scheme.ts` once, before your first player, and never change it after.** Its three texts say `your-game.example`
+  now: replace that with your domain (for example `mygame.com`), run `npm test`, and write the two new values that `test/scheme.test.ts` prints into
+  that test. After your first player, a change of one character gives every passkey player another address, and they lose their looks. Your AI
+  assistant knows this rule (`AGENTS.md`).
+
+After a new passkey the sign-in offers **"Keep a spare key"**: the seed of that address, to keep somewhere safe. If the passkey is lost, the
+player imports the seed in a Nano wallet (for example Nautilus) and signs in with that wallet: the same address, the same looks.
+
+If you add a "Delete my data" page, call the sign-in's `forget(address)`, the shop's `store.forget(address, now)` (it asks you to wait while an order
+of the player may still be paid) and the friends list's `forget(address)` from it.
+
 ## How a sale works
 
-1. A player signs in with Nano: Berry Wallet, NanChat or Nautilus signs a short message (no password, no
+1. A player signs in: a passkey, or Berry Wallet, NanChat or Nautilus, signs a short message (no password, no
    payment).
 2. The player picks a look. The game turns its US dollar price into XNO with public price feeds and
    asks for a **clean amount** with at most 4 decimals (for example `0.2778 XNO`). While another order
@@ -268,9 +297,12 @@ The tests use a fake Nano node and keys made in the test: no network and no mone
 | `public/looks/` | The looks' own 3D models (`.glb`), named in a look's `slots` |
 | `src/client/game/` | The 3D game: the island (`world.ts`), the character, the gems, the rules (`game.ts`) |
 | `src/client/options.ts` | The player's settings (the Options key) |
+| `src/shared/scheme.ts` | Your domain in the passkey scheme: ONCE, before your first player (see "The shop and the sign-in") |
 | `public/art/` | The listing pictures (`wide.jpg` 1600×900, `tall.jpg` 900×1600) |
 
-Do not change the payment check, the reservation, the admin guard or the sign-in. `AGENTS.md` says why.
+Do not change the payment check, the reservation, the admin guard or the sign-in. The shop and the player's sign-in come from the package
+`@nano133/nanoterra`: do not copy their code into your game. `AGENTS.md` says why.
 
-MIT license. Copyright Pugs, LLC. Made by [nano133.com](https://nano133.com). Sign in with Nano is
+MIT license. Copyright Pugs, LLC. Made by [nano133.com](https://nano133.com). The shop and the player's sign-in are
+[`@nano133/nanoterra`](https://www.npmjs.com/package/@nano133/nanoterra); Sign in with Nano is
 [`@nano133/signin`](https://www.npmjs.com/package/@nano133/signin).

@@ -5,9 +5,9 @@
 import { nanoSigninMessage } from "@nano133/signin";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Env } from "../src/worker/env";
-import { ADMIN_LOGIN_KEEP_MS, ADMIN_REQUEST_MS, createSession, recordAdminLogin } from "../src/worker/signin";
+import { ADMIN_LOGIN_KEEP_MS, ADMIN_REQUEST_MS, recordAdminLogin } from "../src/worker/signin";
 import { Browser, ORIGIN, signedInWith, walletAnswer, walletCall, walletFrom } from "./api";
-import { berryAnswer, makeDb, nanoauthItem, nautilusAnswer, testAccount } from "./helpers";
+import { berryAnswer, createSession, makeDb, nanoauthItem, nautilusAnswer, testAccount } from "./helpers";
 
 let env: Env;
 let close: () => Promise<void>;
@@ -112,10 +112,11 @@ describe("a game sign-in can never open /admin, and an admin sign-in can never m
       await walletAnswer(env, way, s.body, owner); // the owner signs the ADMIN's text
       const before = await sessionCount();
       const stranger = new Browser();
-      expect((await stranger.call(env, "/api/signin/check", { body: { id: s.body.id, way, scope: "play" } })).body).toEqual({ status: "elsewhere" });
+      // The player's sign-in (the package's) holds no admin request: to it the request does not exist ("expired").
+      expect((await stranger.call(env, "/api/signin/check", { body: { id: s.body.id, way, scope: "play" } })).body).toEqual({ status: "expired" });
       admin.jar.set("starter", admin.jar.get("starter-admin")!);
       const asGame = await admin.call(env, "/api/signin/check", { body: { id: s.body.id, way, scope: "play" } });
-      expect(asGame.body).toEqual({ status: "elsewhere" });
+      expect(asGame.body).toEqual({ status: "expired" });
       expect(admin.jar.has("session")).toBe(false);
       expect(await sessionCount()).toBe(before);
       expect((await admin.call(env, "/api/me")).body).toMatchObject({ address: null });
@@ -316,7 +317,8 @@ describe("what the third security read found", () => {
         forger.jar.set("starter", forged);
         for (const at of [t0 + 20_000, t0 + 30 * 60_000]) {
           const got = await checkAs(forger, a.body.id, way, "play", at);
-          expect(got.body, `${way} at +${at - t0} ms`).toEqual({ status: "elsewhere" });
+          // The player's sign-in (the package's) holds no admin request: to it the request does not exist ("expired").
+          expect(got.body, `${way} at +${at - t0} ms`).toEqual({ status: "expired" });
           expect(forger.jar.has("session")).toBe(false);
         }
       }
@@ -326,7 +328,7 @@ describe("what the third security read found", () => {
         b.jar.set("starter", odd);
         b.jar.set("starter-admin", odd);
         expect((await checkAs(b, a.body.id, way, "admin")).body, JSON.stringify(odd)).toEqual({ status: "elsewhere" });
-        expect((await checkAs(b, a.body.id, way, "play")).body, JSON.stringify(odd)).toEqual({ status: "elsewhere" });
+        expect((await checkAs(b, a.body.id, way, "play")).body, JSON.stringify(odd)).toEqual({ status: "expired" });
       }
       expect(await sessionCount()).toBe(before);
       // The request was not used up by those tries: its own browser still gets its admin login, once.

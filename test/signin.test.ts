@@ -1,5 +1,7 @@
 // Sign in with Nano (Berry Wallet, nano-signin-v1) through the game's own API routes, with keys made in this
 // test. A valid signature signs in the browser that started the request, once; anything else is refused.
+// The rules are the package's (@nano133/nanoterra/player-signin, which tests them itself): this file pins that the game
+// wires it in (the routes, the cookie, the D1 tables, the same-origin check) and that the starter's answers stay the same.
 
 import { nanoSigninMessage } from "@nano133/signin";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

@@ -3,9 +3,11 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Env } from "../src/worker/env";
-import { ADMIN_SESSION_MS, createSession, SESSION_DAYS, sessionOf, WAYS } from "../src/worker/signin";
+import { SESSION_DAYS, WAYS } from "@nano133/nanoterra/player-signin";
+import { playerSignin } from "../src/worker/player";
+import { ADMIN_SESSION_MS, adminSession } from "../src/worker/signin";
 import { Browser, signedInWith, walletAnswer, walletFrom } from "./api";
-import { makeDb, testAccount } from "./helpers";
+import { createSession, makeDb, testAccount } from "./helpers";
 
 let env: Env;
 let close: () => Promise<void>;
@@ -108,7 +110,8 @@ describe("the admin login", () => {
       await walletAnswer(env, "berry", start.body, owner);
       const before = await sessionCount();
       const wrong = await browser.call(env, "/api/signin/check", { body: { id: start.body.id, way: "berry", scope: finished } });
-      expect(wrong.body).toEqual({ status: "elsewhere" });
+      // The player's sign-in (the package's) holds no admin request: to it the request does not exist ("expired"). The admin's sees a game request as "elsewhere".
+      expect(wrong.body).toEqual({ status: finished === "play" ? "expired" : "elsewhere" });
       expect(wrong.res.headers.getSetCookie()).toEqual([]);
       expect(await sessionCount()).toBe(before);
       // The right scope still finishes it, once.
@@ -210,14 +213,14 @@ describe("on https the logins are `__Host-` cookies, one day and thirty days", (
     const game = await createSession(env.DB, player.address, Date.now(), "wallet", "play");
     const admin = await createSession(env.DB, owner.address, Date.now(), "wallet", "admin");
     const asReq = (cookie: string) => new Request(`${https}/x`, { headers: { Cookie: cookie } });
-    expect((await sessionOf(env.DB, asReq(`__Host-session=${game}`), Date.now(), "play"))?.address).toBe(player.address);
-    expect((await sessionOf(env.DB, asReq(`__Host-admin=${admin}`), Date.now(), "admin"))?.address).toBe(owner.address);
+    expect((await playerSignin(env).session(asReq(`__Host-session=${game}`)))?.address).toBe(player.address);
+    expect((await adminSession(env.DB, asReq(`__Host-admin=${admin}`), Date.now()))?.address).toBe(owner.address);
     // The plain names are not read on https (a sibling subdomain can set them; it cannot set a `__Host-` one).
-    expect(await sessionOf(env.DB, asReq(`session=${game}`), Date.now(), "play")).toBeNull();
-    expect(await sessionOf(env.DB, asReq(`admin=${admin}`), Date.now(), "admin")).toBeNull();
+    expect(await playerSignin(env).session(asReq(`session=${game}`))).toBeNull();
+    expect(await adminSession(env.DB, asReq(`admin=${admin}`), Date.now())).toBeNull();
     // And each token is good only in its own scope.
-    expect(await sessionOf(env.DB, asReq(`__Host-admin=${game}`), Date.now(), "admin")).toBeNull();
-    expect(await sessionOf(env.DB, asReq(`__Host-session=${admin}`), Date.now(), "play")).toBeNull();
+    expect(await adminSession(env.DB, asReq(`__Host-admin=${game}`), Date.now())).toBeNull();
+    expect(await playerSignin(env).session(asReq(`__Host-session=${admin}`))).toBeNull();
 
     const rows = await env.DB.prepare("SELECT address, expires_at - created_at AS life FROM sessions WHERE address IN (?, ?)").bind(player.address, owner.address).all<{ address: string; life: number }>();
     const life = Object.fromEntries(rows.results.map((r) => [r.address, r.life]));

@@ -18,10 +18,11 @@ creator's address. The Worker holds **no key**: it only reads the Nano ledger to
 | `public/looks/` | The looks' models (`.glb`). Each passes `test/lookModels.test.ts`. |
 | `src/client/game/` | The game: `world.ts` (the level), `character.ts` (what a character does, and the penguin), `nanoterraCharacter.ts` (the Nanoterra character), `hat.ts`, `gems.ts`, `controls.ts` (keys and thumbs; they let go when the page is left: `releaseWhenLost` from `@nano133/nanoterra/input`), `game.ts` (rules, speed, camera). `main.ts` pauses a free round when the player leaves the page (`pauseWhenLeft`, same path) and keeps it paused until Resume; a round that costs money must not stop its clock. Safe to change. |
 | `src/client/options.ts` | The player's settings (`@nano133/nanoterra/options`): one store, kept in this browser (`n133-options:gem-island`), with the Options key and panel mounted in `main.ts`. See "The options menu" below. |
-| `src/client/ui/`, `src/client/style.css` | The sheets (looks, sign-in, pay) and the look of the page. Change with care (see "Never change"). |
+| `src/client/ui/`, `src/client/style.css` | The account sheet, the admin's own sign-in (`ui/signin.ts`) and the look of the page. The Looks sheet, the pay sheet and the player's sign-in sheet **are the package's** (see "The shop and the player's sign-in"); `style.css` only gives them the game's colours. Change with care (see "Never change"). |
 | `public/` | Static files: `art/wide.jpg`, `art/tall.jpg`, `favicon.svg`, and `nanoterra.css` (the look of the sign-in pages: see "Safe changes"). |
-| `src/worker/` | The server. Money and sign-in live here. See "Never change". |
-| `src/shared/` | Code for both sides: amounts (`amount.ts`), looks (`looks.ts`, with the rules in `@nano133/nanoterra/looks`), config, security headers. |
+| `src/worker/` | The server. See "Never change". The shop and the player's sign-in are the package's: `src/worker/player.ts` only sets them up on this game's tables and settings. The admin's own sign-in is `src/worker/signin.ts`. |
+| `src/shared/scheme.ts` | The FROZEN passkey scheme of this game (see "The shop and the player's sign-in"). Set your domain in it once, before the first player; never change it after. |
+| `src/shared/` | Code for both sides: looks (`looks.ts`, with the rules in `@nano133/nanoterra/looks`), config, the passkey scheme, security headers. |
 | `src/worker/nanoterra.ts` | Sign in from Nanoterra (`/nanoterra/callback`, `/nanoterra/confirm`, `/nanoterra/cancel`): trades a one-time code for the player's details, shows a confirm screen (it and the error pages share one frame, `frame()`, dressed by `public/nanoterra.css`), makes a session on Continue. See "Never change". |
 | `src/worker/friends.ts` | The game's own friends list (the admin's friends setting `"own"`): the package's handler (`@nano133/nanoterra/friends`) at `/api/friends` on the D1 tables of `migrations/0007_friends.sql`, with this game's directory of players (a Nanoterra username or a short address; never a full address to the browser). See "The friends list" below. |
 | `migrations/` | The database tables. Add a new numbered file; never edit an applied one. |
@@ -100,11 +101,11 @@ npm run check      # typecheck + tests + build: run it before every commit
 - `src/client/main.ts` mounts the key once, after `/api/config` (`mountFriends`, `@nano133/nanoterra/friends/panel`, and its `style.css`), in `#friends` in the HUD's
   right group. **Never hide it with `display: none` and never remove it:** in the `"nanoterra"` mode its window holds the player's live connection. With `"nanoterra"`
   and no `nanoterraId` there is no key, and `/admin` says why. `whereNow()` gives the plain text that friends see; keep it short and true.
-- `/api/friends` answers only in the `"own"` mode (404 in the others). Its player is the PLAYER session (`sessionOf`, cookie `session`), **never the admin cookie**. The
+- `/api/friends` answers only in the `"own"` mode (404 in the others). Its player is the PLAYER session (`signin.session()`, cookie `session`), **never the admin cookie**. The
   package's handler checks the origin (a POST from the game's own page) and the limit (30 calls a minute for each player). `test/friends.test.ts` runs the package's
   `friendsStoreConformance` on the real D1 tables, and pins the refusals.
 - The window's frame comes from `https://nano133.com` (`frame-src` in `src/shared/security.ts`). Do not add another origin for it.
-- There is no "Delete my data" yet. A page that adds one calls `friendsStore(env).forget(address)` too.
+- There is no "Delete my data" yet. A page that adds one calls `friendsStore(env).forget(address)` too (and the shop's and the sign-in's, see below).
 
 ## The options menu
 
@@ -138,20 +139,49 @@ npm run check      # typecheck + tests + build: run it before every commit
 - **Multiplayer** (the starter is single-player): send each emote from `createEmotes(body, { onEmote: (e) => send(emoteMessage(e)) })` and play the others' with
   `playRemote(theirBody, { id: readEmoteMessage(message) }, { options })`, and add `EMOTE_OPTIONS` to the store; with `emotes` `"off"`, send none and play none. The kit's README ("Emotes") has the rest.
 
+## The shop and the player's sign-in
+
+Both come from the package `@nano133/nanoterra` (since 0.9.0). The game does not keep a copy of either: do not copy their code back into this repository.
+
+- **The shop** (`@nano133/nanoterra/shop`): the order routes (`POST /api/orders`, `GET /api/orders/{id}`, `POST /api/orders/{id}/check`), the unique clean
+  amount of each order, the match on the ledger, the price, the nodes and the payment scan. `src/worker/player.ts` makes it with `createShop(env, { catalogue:
+  looks.json, player })` from `/shop/worker`; the cron (`*/10`, `scheduled` in `src/worker/index.ts`) and the admin's "Check payments now" call `shop.scan()`.
+  The page mounts `mountShop` (`/shop/panel`, with `key: false`: the game's own Looks keys call `shop.open()`) and its stylesheet. The tables are the game's own
+  (`orders`, `owned`, `meta`, `hits`, from `migrations/0001_init.sql`): the package reads and writes them as they are.
+- **The player's sign-in** (`@nano133/nanoterra/player-signin`): a passkey, or Berry Wallet, NanChat or Nautilus, on `/api/signin/*` and `/api/signout`, with
+  the session cookie `session`. `src/worker/player.ts` makes it with `createPlayerSignin({ store: createD1PlayerSignin(env.DB), ..., sharedPaths: true })`.
+  `sharedPaths` is there because the ADMIN signs in on the same paths (`scope: "admin"`): the package leaves those calls to `src/worker/signin.ts`. Everything
+  that needs the player reads `signin.player(request)` or `signin.session(request)` (the shop, `/api/me`, the friends list); never an address from a body. A
+  sign-in from Nanoterra makes its session with `signin.signIn(request, address, "nanoterra")`. The page mounts `mountPlayerSignin` (`/player-signin/panel`)
+  and its stylesheet; the account key and the shop's Buy open it. `migrations/0008_player_signin.sql` is the package's `d1.sql`: it adds `signin_once` (the
+  passkey's once-only keys) and keeps every table and session.
+- **The passkey scheme is FROZEN** (`src/shared/scheme.ts`). A passkey player's account, and so every look they buy, lies at the address its three texts give.
+  The template has `your-game.example`. **The creator sets their game's domain in the three texts ONCE, before the first player**, runs `npm test`, and writes
+  the two new vectors that `test/scheme.test.ts` prints into that test. After the first player, never change a character of it, and never change the vectors
+  to make the test pass: every passkey player would lose their looks. A new scheme is a new `versionByte` with new texts, never an edit.
+- **No passkey on `*.workers.dev`.** A passkey belongs to one domain for good, and a game on the preview address moves to its own domain later. So on
+  `*.workers.dev` the sign-in sheet offers the wallet apps only (the package's default; do not pass `passkey: true`), and `/admin` says "Passkeys turn on when your
+  game has its own domain." (`mountAdmin(..., { playerPasskeys: true })` in `src/client/admin.ts`). Set the domain before the first passkey player.
+- **What the game keeps:** `looks.json` (the shop's catalogue, the page's list and the admin's Shelf: the same file), `wrangler.jsonc` and the secrets (the shop
+  reads `RECEIVE_ADDRESS`, `TEST_MODE`, `NODE_API_KEY`, `NANO_NODES`, `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET` itself), the frozen scheme, the account
+  sheet, the admin's sign-in and the Content Security Policy (`src/shared/security.ts` merges the shop's `SHOP_CSP` into the game's own list with `mergeCsp`).
+- **"Delete my data"** (the starter has none): a page that adds one calls `playerSignin(env).forget(address)`, `shopOf(env).store.forget(address, Date.now())`
+  (it answers `waitUntil` while an order of the player may still be paid: try again then) and `friendsStore(env).forget(address)`.
+
 ## Never change (without the creator's clear yes, and new tests)
 
 These parts protect the creator's money and the players. If the creator asks to change one, explain
 the risk first, then change it only with tests in `test/` that show the new rule.
 
-1. **The payment check** (`src/worker/match.ts`, `src/worker/sweep.ts`): exact amount, to the
+1. **The payment check** (the package's shop: do not copy it back, do not wrap it with a looser one): exact amount, to the
    creator's address, a confirmed send, first seen after the order (less 2 minutes for clocks). One
    payment pays one order, once.
-2. **The reservation** (`src/worker/orders.ts`, the UNIQUE `amount_lock` column): no two waiting
+2. **The reservation** (the package's shop, on the UNIQUE `amount_lock` column of `orders`): no two waiting
    orders ever ask for the same amount. Amounts are clean (at most 4 decimals of XNO) because some
    wallets shorten longer amounts, and then a payment matches nothing.
-3. **Amounts as text and BigInt** (`src/shared/amount.ts`). Never use a float for an amount that is
+3. **Amounts as text and BigInt** (the package's shop). Never use a float for an amount that is
    paid or compared. Round prices up, never down.
-4. **Test mode** (`src/worker/env.ts`, `src/client/ui/pay.ts`): without a real address, or with
+4. **Test mode** (the package's shop: its answer and its pay sheet; `RECEIVE_ADDRESS` and `TEST_MODE` in `wrangler.jsonc`): without a real address, or with
    `TEST_MODE` on, a pay screen shows **TEST MODE: DO NOT PAY**, no QR code, no address and no wallet
    link. A payment to an address nobody holds the key for is lost for good.
 5. **The admin guard** (the package's `adminAccess`, used by the handler that `src/worker/admin.ts` makes; every `/api/admin/*` route is behind it, the "Game" card's too): only the
@@ -160,13 +190,14 @@ the risk first, then change it only with tests in `test/` that show the new rule
    against it, so a wrong cookie, a missing owner or a route outside the guard fails a test. **The admin login is its own cookie** (`admin`, made only by a wallet
    signature that `/admin` started, `scope: "admin"`; the game's is `session`): the guard reads only the admin cookie, so a login made for
    the game (a wallet, or Nanoterra) can never open `/admin`, and an admin login is not a player. Keep it that way.
-6. **Sign-in** (`src/worker/signin.ts`, the `@nano133/signin` package): players sign in with Berry
-   Wallet, NanChat or Nautilus. The signed text names the game's domain; only the browser that started a
-   sign-in gets the session; one session per sign-in. Whichever wallet signs, only `RECEIVE_ADDRESS` opens
-   `/admin`. **The admin's wallet text names the admin** (Berry: the `uri` is `/admin`, with no query: Berry Wallet refused `/admin?from=US` on a device test, 2026-10-27; Nautilus: the label is `ADMIN of <host> sign-in <code> from <country>`), an admin
+6. **Sign-in** (the player's: the package's `@nano133/nanoterra/player-signin`; the admin's: `src/worker/signin.ts`; both check signatures with
+   `@nano133/signin`): players sign in with a passkey, Berry Wallet, NanChat or Nautilus. The signed text names the game's domain; only the browser that
+   started a sign-in gets the session; one session per sign-in. The player's sign-in never makes an admin login, and it never reads, delivers or deletes
+   an admin row (`scope = 'admin'`). Whichever wallet signs, only `RECEIVE_ADDRESS` opens
+   `/admin`. **The passkey scheme** (`src/shared/scheme.ts`) is frozen after the first player (see "The shop and the player's sign-in"). **The admin's wallet text names the admin** (Berry: the `uri` is `/admin`, with no query: Berry Wallet refused `/admin?from=US` on a device test, 2026-10-27; Nautilus: the label is `ADMIN of <host> sign-in <code> from <country>`), an admin
    request lives 2 minutes (`ADMIN_REQUEST_MS`) and is delivered for one more minute (`ADMIN_DELIVER_MS`), NanChat is refused for the admin, and Berry's kind (admin or game) is kept in the
    request's `scope` column (migration 0006, written when it starts, read again by `kindOf` and by `checkSignin`: a request started for one scope can never make a login in the other,
-   whatever the browser presents; a starter cookie that is not 64 hex characters is no starter) so the wallet's GET and POST get the same text; `sessionOf` also checks the row's scope. `test/adminSignin.test.ts` pins that a game signature never opens `/admin` and an admin one never makes a
+   whatever the browser presents; a starter cookie that is not 64 hex characters is no starter) so the wallet's GET and POST get the same text; `adminSession` also checks the row's scope. `test/adminSignin.test.ts` pins that a game signature never opens `/admin` and an admin one never makes a
    game session. Do not change any of it without that test. The admin's sign-in list keeps only a time, a two-letter country and a short browser name (`src/worker/browser.ts`): never an
    address, an IP or a browser text. NanChat's answers all come through its relay server, so their limits are totals and per
    sign-in, never per visitor.

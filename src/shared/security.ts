@@ -2,13 +2,16 @@
 // files (Cloudflare serves those without running the Worker), and the Worker adds the same ones to its own
 // answers. One list, so the two never drift apart.
 
+import { mergeCsp, SHOP_CSP } from "@nano133/nanoterra/shop";
+
 /** Turnstile (Cloudflare's free check that a visitor is a person) loads from here. */
 export const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
 
 /** Nanoterra's friends window (the admin's friends setting "nanoterra") is a frame from here: `/embed/friends?game=<id>&v=1`. */
 export const NANOTERRA_ORIGIN = "https://nano133.com";
 
-export const CONTENT_SECURITY_POLICY = [
+/** The game's own policy. The shop's needs (SHOP_CSP: Turnstile, and its calls to this site) are merged in below; never replace this list with the package's. */
+const GAME_POLICY = [
   "default-src 'none'",
   `script-src 'self' ${TURNSTILE_ORIGIN}`,
   "style-src 'self'",
@@ -23,6 +26,9 @@ export const CONTENT_SECURITY_POLICY = [
   // No other site may show the game in a frame. To let one (for example Nano Island), add its origin here.
   "frame-ancestors 'none'",
 ].join("; ");
+
+/** The policy of every page and answer: the game's own, with the shop's sources added (a source is never written twice). */
+export const CONTENT_SECURITY_POLICY = mergeCsp(GAME_POLICY, SHOP_CSP);
 
 export function securityHeaders(): Record<string, string> {
   return {

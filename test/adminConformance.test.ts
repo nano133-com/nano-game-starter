@@ -1,4 +1,4 @@
-// The package's conformance suite (@nano133/nanoterra/admin/conformance), run against THIS game's own chain: the admin cookie, sessionOf, receiveAddress, the
+// The package's conformance suite (@nano133/nanoterra/admin/conformance), run against THIS game's own chain: the admin cookie, adminSession, receiveAddress, the
 // D1 store and the whole Worker (worker.fetch). It proves the part that is the game's own: that the game reads the ADMIN cookie only, passes its real owner,
 // and that every route the handler lists is behind the guard. The pure guard has its own tests in the package.
 
@@ -7,9 +7,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { adminHandler, gameStore } from "../src/worker/admin";
 import { EXAMPLE_ADDRESS, type Env } from "../src/worker/env";
 import worker from "../src/worker/index";
-import { createSession } from "../src/worker/signin";
 import { Browser, ORIGIN, signedInWith, walletAnswer, walletFrom } from "./api";
-import { makeDb, testAccount } from "./helpers";
+import { createSession, makeDb, testAccount } from "./helpers";
 
 let db: D1Database;
 let close: () => Promise<void>;

@@ -22,8 +22,11 @@ mountAdmin(document.getElementById("admin-panel")!, {
   // The wallet sign-in of the ADMIN scope (its own cookie): only a wallet signature that was started from /admin makes an admin login.
   signIn: async (into, done) => {
     const config = await get<Config>("/api/config").catch((): Config => ({ name: "", creator: "", testMode: true, turnstileSiteKey: null }));
-    into.append(signInView(config, done, "admin").node);
+    into.append(signInView(config, done).node);
   },
   // Only the admin login: the game's login (another person, perhaps) stays.
   signOut: () => post("/api/signout", { scope: "admin" }),
+  // The game offers its players a passkey (the package's player sign-in): on a *.workers.dev address the "Check these" banner says that passkeys
+  // turn on when the game has its own domain (a passkey belongs to one domain for good).
+  playerPasskeys: true,
 });

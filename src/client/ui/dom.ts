@@ -19,16 +19,5 @@ export function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Attrs = 
 /** "nano_1abc…wxyz" */
 export const shortAddress = (a: string) => `${a.slice(0, 10)}…${a.slice(-6)}`;
 
-export async function copy(text: string, button: HTMLButtonElement) {
-  const was = button.textContent;
-  try {
-    await navigator.clipboard.writeText(text);
-    button.textContent = "Copied";
-  } catch {
-    button.textContent = "Copy failed";
-  }
-  setTimeout(() => (button.textContent = was), 1500);
-}
-
 /** True on a phone or a tablet (a finger, not a mouse). */
 export const isTouch = () => matchMedia("(pointer: coarse)").matches;

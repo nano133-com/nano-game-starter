@@ -20,11 +20,12 @@
 // page, a log or a message. DO NOT CHANGE the checks in this file.
 
 import { unpackRecord } from "@nano133/nanoterra/character/record";
+import { d1Limit } from "@nano133/nanoterra/shop/d1";
 import { validAddress } from "@nano133/signin/verify";
 import { nanoterraOn, setting, type Env } from "./env";
 import { json, randomHex, readCookie, sameOrigin, setCookie, sha256Hex, tooLarge } from "./http";
-import { d1Limit, LIMITS, memoryLimit } from "./ratelimit";
-import { createSession, SESSION_DAYS } from "./signin";
+import { memoryLimit } from "./ratelimit";
+import { playerSignin } from "./player";
 
 const NANOTERRA = "https://nano133.com";
 /** A code is 32 random bytes in base64url. */
@@ -41,8 +42,8 @@ const STATE = /^[A-Za-z0-9_-]{16,128}$/;
 /** The cookie that waits for the player's Continue, and how long it lives (the player has 5 minutes to press it). */
 const PENDING_COOKIE = "nanoterra-pending";
 const PENDING_SECONDS = 300;
-/** A pending cookie is used once: its id is counted in D1 (`hits`, cleared by the sweep in this window's unit) in the window of its own deadline. */
-const ONCE_WINDOW_MS = LIMITS.order.windowMs;
+/** A pending cookie is used once: its id is counted in D1 (`hits`, which the cron clears in 10-minute windows: keep this one) in the window of its own deadline. */
+const ONCE_WINDOW_MS = 10 * 60_000;
 /** Put in front of what is signed, so a signature made here is good for nothing else. */
 const PENDING_LABEL = "nano-game-starter: a Nanoterra sign-in waits for Continue, v1";
 const text = new TextEncoder();
@@ -258,9 +259,10 @@ export async function confirm(env: Env, req: Request, ip: string, now = Date.now
   }
   if (bind !== (await bindOf(pending.token))) return page(400, "That sign-in changed", "Another sign-in started in this browser after this screen was shown. Press Play in Nanoterra again.");
   if (!(await useOnce(env, pending))) return page(400, "That sign-in was used", "This sign-in was used or cancelled already. Press Play in Nanoterra again.");
-  const token = await createSession(env.DB, pending.address, now, "nanoterra");
+  // The player's session: the package's sign-in makes it (the cookie `session`, 30 days), with the word "nanoterra" so it never opens /admin.
+  const session = await playerSignin(env, now).signIn(req, pending.address, "nanoterra");
   const headers = new Headers({ Location: "/", "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" });
-  headers.append("Set-Cookie", setCookie(req, "session", token, SESSION_DAYS * 86400));
+  headers.append("Set-Cookie", session);
   headers.append("Set-Cookie", setCookie(req, PENDING_COOKIE, "", 0));
   return new Response(null, { status: 303, headers });
 }

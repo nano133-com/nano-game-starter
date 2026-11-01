@@ -1,10 +1,11 @@
 // Sign in with Nautilus and NanChat through the game's own API routes, beside Berry Wallet, with keys made in this
 // test. A valid signature signs in the browser that started the request, once; anything else is refused. Whichever
-// wallet signs, only the creator's own address (RECEIVE_ADDRESS) opens /admin.
+// wallet signs, only the creator's own address (RECEIVE_ADDRESS) opens /admin. The player's rules are the package's
+// (@nano133/nanoterra/player-signin): this file pins the game's wiring (the routes, the D1 limits) and the admin's own wallets.
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { EXAMPLE_ADDRESS, type Env } from "../src/worker/env";
-import { WAYS } from "../src/worker/signin";
+import { WAYS } from "@nano133/nanoterra/player-signin";
 import { Browser, ORIGIN, signedInWith, walletAnswer, walletCall } from "./api";
 import { makeDb, nanauthOf, nanchatAnswer, nanoauthItem, nautilusAnswer, testAccount } from "./helpers";
 

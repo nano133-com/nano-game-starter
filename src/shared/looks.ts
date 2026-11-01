@@ -4,9 +4,9 @@
 // package @nano133/nanoterra (path /looks), so the game and the Shelf screen in /admin check the same words.
 
 import list from "../../looks.json" with { type: "json" };
-import { checkLooks, HATS, isOutfit, usdText, type Change, type Hat, type Look } from "@nano133/nanoterra/looks";
+import { checkLooks, HATS, isOutfit, type Change, type Hat, type Look } from "@nano133/nanoterra/looks";
 
-export { checkLooks, HATS, isOutfit, usdText };
+export { HATS, isOutfit };
 export type { Hat, Look };
 
 /** An outfit: a look the character wears (its body colour and hat, `change`). Every other look fills a wear slot of the game's own

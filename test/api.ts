@@ -3,7 +3,7 @@
 import { nanoSigninMessage } from "@nano133/signin";
 import { handleApi } from "../src/worker/index";
 import type { Env } from "../src/worker/env";
-import type { Way } from "../src/worker/signin";
+import type { Way } from "@nano133/nanoterra/player-signin";
 import { berryAnswer, nanauthOf, nanchatAnswer, nanoauthItem, nautilusAnswer } from "./helpers";
 
 export const ORIGIN = "http://game.test";
