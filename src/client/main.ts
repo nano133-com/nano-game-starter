@@ -246,6 +246,12 @@ const shop = mountShop($("app"), {
     void refreshMe();
   },
   personCheck: (box) => personCheck(config.turnstileSiteKey, box),
+  // The server refused an order with 401: the session ended. The player is signed out here too; the sheet's "Sign in" key signs in again.
+  onSessionEnd: () => {
+    me = { address: null, owned: [], admin: false };
+    renderAccount();
+    dress();
+  },
   onOpen: () => {
     shopOpen = atLooks = true;
     holdGame();
