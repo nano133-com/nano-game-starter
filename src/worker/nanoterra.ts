@@ -103,9 +103,19 @@ export async function exchangeCode(env: Env, code: string, state: string, fetche
   }
 }
 
-/** A plain page for a sign-in that did not work, with a way into the game as a guest. */
+/**
+ * The frame of every page of this flow (the confirm screen and the error pages), so they share one look: public/nanoterra.css,
+ * whose tokens at the top give them the game's colours, font, keys and an optional picture and logo (the logo is a CSS picture
+ * on `.nt-logo`, hidden until the stylesheet shows it, so the page holds no <img>). Markup only: no check, cookie or form lives
+ * here. `head` is extra tags for the head.
+ */
+function frame(title: string, card: string, head = ""): string {
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${head}<link rel="stylesheet" href="/nanoterra.css"><title>${title}</title><main class="nt"><div class="nt-logo" aria-hidden="true"></div><div class="nt-card">${card}</div></main>`;
+}
+
+/** A page for a sign-in that did not work, with a way into the game as a guest. */
 function page(status: number, title: string, words: string, cookies: string[] = []): Response {
-  const html = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/nanoterra.css"><title>${title}</title><h1>${title}</h1><p>${words}</p><p><a href="/">Play as a guest</a></p>`;
+  const html = frame(title, `<h1>${title}</h1><p>${words}</p><p class="nt-go"><a href="/">Play as a guest</a></p>`);
   const headers = new Headers({ "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" });
   for (const c of cookies) headers.append("Set-Cookie", c);
   return new Response(html, { status, headers });
@@ -185,7 +195,11 @@ const shortAddress = (a: string) => `${a.slice(0, 11)}\u2026${a.slice(-6)}`;
 async function confirmPage(req: Request, player: Player, token: string): Promise<Response> {
   const name = escapeHtml(player.username);
   const bind = await bindOf(token);
-  const html = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><link rel="stylesheet" href="/nanoterra.css"><title>Sign in as ${name}?</title><h1>Sign in as ${name}?</h1><p>Nanoterra says you are <strong>${name}</strong>, with the address <code>${shortAddress(player.address)}</code>.</p><p>Press <strong>Continue</strong> only if you just pressed Play in Nanoterra yourself. If someone sent you this link, press <strong>Not me</strong>.</p><form method="post" action="/nanoterra/confirm"><input type="hidden" name="bind" value="${bind}"><button type="submit" class="primary">Continue as ${name}</button></form><form method="post" action="/nanoterra/cancel"><button type="submit">Not me</button></form>`;
+  const html = frame(
+    `Sign in as ${name}?`,
+    `<h1>Sign in as ${name}?</h1><p>Nanoterra says you are <strong>${name}</strong>, with the address <code>${shortAddress(player.address)}</code>.</p><p class="nt-guard">Press <strong>Continue</strong> only if you just pressed Play in Nanoterra yourself. If someone sent you this link, press <strong>Not me</strong>.</p><form method="post" action="/nanoterra/confirm"><input type="hidden" name="bind" value="${bind}"><button type="submit" class="primary">Continue as ${name}</button></form><form method="post" action="/nanoterra/cancel"><button type="submit">Not me</button></form>`,
+    '<meta name="robots" content="noindex">',
+  );
   // "same-origin", not "no-referrer": with no-referrer a browser sends `Origin: null` on the form's POST, and confirm() would refuse
   // the player's own press. Another site still gets no Referer from this page, and its own POST here still carries its own Origin.
   const headers = new Headers({ "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Referrer-Policy": "same-origin" });

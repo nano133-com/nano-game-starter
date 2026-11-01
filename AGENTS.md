@@ -18,10 +18,10 @@ creator's address. The Worker holds **no key**: it only reads the Nano ledger to
 | `public/looks/` | The looks' models (`.glb`). Each passes `test/lookModels.test.ts`. |
 | `src/client/game/` | The game: `world.ts` (the level), `character.ts` (what a character does, and the penguin), `nanoterraCharacter.ts` (the Nanoterra character), `hat.ts`, `gems.ts`, `controls.ts` (keys and thumbs; they let go when the page is left: `releaseWhenLost` from `@nano133/nanoterra/input`), `game.ts` (rules, speed, camera). `main.ts` pauses a free round when the player leaves the page (`pauseWhenLeft`, same path) and keeps it paused until Resume; a round that costs money must not stop its clock. Safe to change. |
 | `src/client/ui/`, `src/client/style.css` | The sheets (looks, sign-in, pay) and the look of the page. Change with care (see "Never change"). |
-| `public/` | Static files: `art/wide.jpg`, `art/tall.jpg`, `favicon.svg`. |
+| `public/` | Static files: `art/wide.jpg`, `art/tall.jpg`, `favicon.svg`, and `nanoterra.css` (the look of the sign-in pages: see "Safe changes"). |
 | `src/worker/` | The server. Money and sign-in live here. See "Never change". |
 | `src/shared/` | Code for both sides: amounts (`amount.ts`), looks (`looks.ts`, with the rules in `@nano133/nanoterra/looks`), config, security headers. |
-| `src/worker/nanoterra.ts` | Sign in from Nanoterra (`/nanoterra/callback`, `/nanoterra/confirm`, `/nanoterra/cancel`): trades a one-time code for the player's details, shows a confirm screen, makes a session on Continue. See "Never change". |
+| `src/worker/nanoterra.ts` | Sign in from Nanoterra (`/nanoterra/callback`, `/nanoterra/confirm`, `/nanoterra/cancel`): trades a one-time code for the player's details, shows a confirm screen (it and the error pages share one frame, `frame()`, dressed by `public/nanoterra.css`), makes a session on Continue. See "Never change". |
 | `src/worker/friends.ts` | The game's own friends list (the admin's friends setting `"own"`): the package's handler (`@nano133/nanoterra/friends`) at `/api/friends` on the D1 tables of `migrations/0007_friends.sql`, with this game's directory of players (a Nanoterra username or a short address; never a full address to the browser). See "The friends list" below. |
 | `migrations/` | The database tables. Add a new numbered file; never edit an applied one. |
 | `test/` | Tests for money, records and sign-in. |
@@ -54,6 +54,16 @@ npm run check      # typecheck + tests + build: run it before every commit
   something paints the Nanoterra character's shirt (its body when it wears no top); the free look must never hide the character that a signed-in player brought.
   The body is display only: never give a base or a size a different collider, jump or reach.
 - **Looks:** add a look to `looks.json` with a new `id`. Keep one free look (`priceUsd: 0`).
+- **The sign-in pages' look:** the confirm screen ("Sign in as <name>?") and the error pages of Sign in from Nanoterra are plain HTML
+  from the Worker (`frame()` in `src/worker/nanoterra.ts`), not part of the game's bundle, so `public/nanoterra.css` is their whole look. To give
+  them the game's look, change the tokens in its `:root` (colours, corners, key sizes, the fonts). Optional, and the page looks right without them:
+  a picture behind the card (`--nt-picture`, `--nt-picture-tall` and `--nt-dim`, a file in `public/art/`), a logo (the "Optional: your logo"
+  rule: a CSS background on `.nt-logo`, so the page has no `<img>`) and your own font (the file in `public/fonts/` WITH its licence, the
+  `@font-face` at the top, the name in `--nt-display` or `--nt-body`). The CSP allows only the game's own files (`style-src 'self'`,
+  `img-src 'self'`, `font-src 'self'`): no inline style, no font or picture from another site, and never loosen the CSP for a look.
+  It is markup and CSS only: keep the words, the forms, their order and the escaped name exactly as they are (`test/nanoterra.test.ts` must
+  pass unchanged). Keys stay 48 px or taller (Continue and Play as a guest 56 to 64 px). Check a phone held upright (390x844) and on its side
+  (844x390), a tablet and a computer: no sideways scroll, the card and its keys on screen.
 - **A look's model:** a look's slot `head`, `hand` or `back` names a model in `public/looks/` (`"slots": { "hand": "shovel" }` is
   `public/looks/shovel.glb`). `src/client/game/worn.ts` loads it (GLTFLoader, only when worn), shares it and frees it; the Nanoterra character
   hangs it on `socket(slot)` and the penguin on its own flipper, head or back. A hand model has an empty `grip_R` node where the hand holds it.
