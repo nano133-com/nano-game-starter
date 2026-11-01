@@ -1,8 +1,10 @@
 // Controls, phones first.
 // - Touch: a thumbstick appears where the left thumb lands (left half of the screen) and moves the character;
 //   a drag on the right half turns the camera. Both at once work: each finger is tracked by its own id.
-//   The Jump button sits at the bottom right.
-// - Computer: WASD or the arrow keys move, Space jumps, a mouse drag anywhere turns the camera.
+//   The Jump button sits at the bottom right. "Move stick: Right" in Options swaps the halves (and style.css moves Jump to the left).
+// - Computer: WASD or the arrow keys move, Space jumps (the player may pick another key in Options), a mouse drag anywhere turns the camera.
+// - Options (../options.ts): "Camera speed" scales the drag (50 is the speed below), "Invert look" turns the up and down drag over. Each
+//   value is read when it is used, so a change in the panel works at once.
 // - Leaving the page (another tab or window, a pop-up, Cmd+Tab, another app on a phone) lets everything go. The
 //   browser sends a key's "up" only to the window that has the focus, so a key that is down when you leave would
 //   otherwise stay down and the character would walk on by itself when you come back. `releaseWhenLost` from the
@@ -10,6 +12,7 @@
 //   goes down again.
 
 import { releaseWhenLost, swallowsKeyup } from "@nano133/nanoterra/input";
+import { options } from "../options";
 
 const STICK_RADIUS = 56;
 const TOUCH_LOOK = 0.0062;
@@ -56,7 +59,8 @@ export class Controls {
     if (!this.enabled) return;
     e.preventDefault();
     const touchLike = e.pointerType !== "mouse";
-    if (touchLike && this.stickId === null && e.clientX < window.innerWidth / 2) {
+    const stickHalf = options.get("stickSide") === "right" ? e.clientX >= window.innerWidth / 2 : e.clientX < window.innerWidth / 2;
+    if (touchLike && this.stickId === null && stickHalf) {
       this.stickId = e.pointerId;
       this.stickOrigin = { x: e.clientX, y: e.clientY };
       this.stickVec = { x: 0, y: 0 };
@@ -84,9 +88,10 @@ export class Controls {
       this.stickVec = { x: dx / STICK_RADIUS, y: -dy / STICK_RADIUS };
       this.knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
     } else if (e.pointerId === this.lookId) {
-      const k = e.pointerType === "mouse" ? MOUSE_LOOK : TOUCH_LOOK;
+      // "Camera speed" 50 is the game's own speed; 10 is a fifth of it, 100 twice it.
+      const k = ((e.pointerType === "mouse" ? MOUSE_LOOK : TOUCH_LOOK) * options.get<number>("cameraSensitivity")) / 50;
       this.look.x += (e.clientX - this.lookLast.x) * k;
-      this.look.y += (e.clientY - this.lookLast.y) * k;
+      this.look.y += (e.clientY - this.lookLast.y) * k * (options.get<boolean>("invertLook") ? -1 : 1);
       this.lookLast = { x: e.clientX, y: e.clientY };
     }
   };
@@ -102,19 +107,24 @@ export class Controls {
 
   private key = (e: KeyboardEvent) => {
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-    const known = ["w", "a", "s", "d", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "];
-    if (!known.includes(k)) return;
+    // The Jump key is the player's (Options, "Keys"): a key's place, e.code, so it is the same key on every keyboard layout. It wins over a move key.
+    const jump = e.code === options.get<string>("keys.jump");
+    const known = ["w", "a", "s", "d", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+    if (!jump && !known.includes(k)) return;
     // Keys belong to the game only while no dialog is open.
     if ((e.target as HTMLElement | null)?.closest?.("dialog[open], input, textarea, select")) return;
     if (e.type === "keyup") {
-      this.keys.delete(k);
+      if (!jump) this.keys.delete(k);
       e.preventDefault();
       return;
     }
     // A browser shortcut (Cmd+W, Cmd+A) is not a move; a card over the game (`enabled` off) takes no key.
     if (swallowsKeyup(e) || !this.enabled) return;
     e.preventDefault();
-    if (k === " " && !e.repeat) this.jumpQueued = true;
+    if (jump) {
+      if (!e.repeat) this.jumpQueued = true;
+      return;
+    }
     this.keys.add(k);
   };
 

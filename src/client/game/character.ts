@@ -33,6 +33,10 @@ export interface Avatar {
   release(): void;
   /** Waits until the models of the look that `wear` was given are on (or failed to load): the Shelf's picture waits for it. */
   ready(): Promise<void>;
+  /** "Less motion" of Options: no swing of the legs and arms and no bob (and an emote shows one still picture). The game sets it at once on a change. */
+  reducedMotion: boolean;
+  /** Plays an emote of the wheel (@nano133/nanoterra/emotes). False, and nothing happens, for a character with no emotes or an id it does not know. */
+  emote(id: string): boolean;
 }
 
 /** The character for `kind`: the switch of /admin ("Game" card), which starts as game.config.json's word. */
@@ -53,6 +57,7 @@ export class Character implements Avatar {
   private models: WornModel[] = [];
   private dressing = 0;
   private loading: Promise<unknown>[] = [];
+  reducedMotion = false;
 
   constructor(private readonly ramp: THREE.Texture) {
     this.bodyMat = toon("#4aa8ff", ramp);
@@ -136,12 +141,18 @@ export class Character implements Avatar {
   /** The penguin has no Nanoterra look. */
   setNanoterra() {}
 
+  /** The penguin has no emotes: the game shows the wheel only for the Nanoterra character (main.ts). */
+  emote() {
+    return false;
+  }
+
   /** A waddle while walking, and a stretch in the air. */
   animate(dt: number, { speed, airborne }: { speed: number; airborne: boolean; verticalSpeed: number }) {
     this.shadow.position.set(this.group.position.x, 0.02, this.group.position.z);
     this.shadow.scale.setScalar(1 / (1 + this.group.position.y * 0.35));
     this.step += dt * (4 + speed * 1.6);
-    const swing = Math.min(1, speed / 6) * Math.sin(this.step * 2);
+    // Less motion: the penguin glides, with no waddle and no bob.
+    const swing = this.reducedMotion ? 0 : Math.min(1, speed / 6) * Math.sin(this.step * 2);
     this.feet[0]!.position.z = 0.06 + swing * 0.18;
     this.feet[1]!.position.z = 0.06 - swing * 0.18;
     this.arms[0]!.rotation.x = swing * 0.6;

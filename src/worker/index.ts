@@ -130,10 +130,11 @@ export async function handleApi(req: Request, env: Env, now = Date.now()): Promi
       testMode: testMode(env),
       turnstileSiteKey: turnstileOn(env) ? setting(env.TURNSTILE_SITE_KEY)! : null,
       // The "Game" card of /admin: which character the players are (the game draws it), whether sign-in from Nanoterra is on, and which
-      // friends list the game shows ("nanoterra", "own" or "off").
+      // friends list the game shows ("nanoterra", "own" or "off"), and whether the emote wheel holds Nanoterra's emotes ("on" or "off").
       character: settings.character,
       nanoterraSignin: signinOn(settings.signin),
       friends: settings.friends,
+      emotes: settings.emotes,
       // The game's id on Nanoterra (game.config.json), or null: the Nanoterra friends window needs it.
       nanoterraId: CONFIG.nanoterraId,
     });

@@ -81,8 +81,8 @@ describe("the Game switches through the Worker", () => {
   it("start from game.config.json, and say so", async () => {
     const r = await (await adminIn(owner.address)).call(live(), "/api/admin/game");
     expect(r.status).toBe(200);
-    // The friends list is the package's own default ("nanoterra"): game.config.json does not name it.
-    expect(r.body).toEqual({ character: CONFIG.character, signin: CONFIG.signin, friends: "nanoterra", fromAdmin: { character: false, signin: false, friends: false } });
+    // The friends list and the emotes are the package's own defaults ("nanoterra", "on"): game.config.json does not name them.
+    expect(r.body).toEqual({ character: CONFIG.character, signin: CONFIG.signin, friends: "nanoterra", emotes: "on", fromAdmin: { character: false, signin: false, friends: false, emotes: false } });
   });
 
   it("a press is saved, read back, and kept in two meta rows with their own prefix", async () => {
@@ -181,6 +181,19 @@ describe("the Worker reads the switches at run time", () => {
     expect((await guest.call(live(), "/api/config")).body).toMatchObject({ character: "own", nanoterraSignin: false });
     await b.call(live(), "/api/admin/game", { method: "POST", body: { character: "nanoterra", signin: "exchange" } });
     expect((await guest.call(live(), "/api/config")).body).toMatchObject({ character: "nanoterra", nanoterraSignin: true });
+  });
+
+  it("/api/config says whether the emote wheel holds Nanoterra's emotes: on by default, off after a press, the default again for a word it does not know", async () => {
+    const guest = new Browser();
+    expect((await guest.call(live(), "/api/config")).body.emotes).toBe("on");
+    const b = await adminIn(owner.address);
+    expect((await b.call(live(), "/api/admin/game", { method: "POST", body: { emotes: "off" } })).body).toMatchObject({ emotes: "off", fromAdmin: { emotes: true } });
+    expect((await guest.call(live(), "/api/config")).body.emotes).toBe("off");
+    expect((await settings()).find((x) => x.key === "setting:emotes")!.value).toBe("off");
+    await b.call(live(), "/api/admin/game", { method: "POST", body: { emotes: "on" } });
+    expect((await guest.call(live(), "/api/config")).body.emotes).toBe("on");
+    await db.prepare("UPDATE meta SET value = 'maybe' WHERE key = 'setting:emotes'").run();
+    expect((await guest.call(live(), "/api/config")).body.emotes).toBe("on");
   });
 
   it("the listing file's signin word follows the switch, and is served for 60 seconds", async () => {

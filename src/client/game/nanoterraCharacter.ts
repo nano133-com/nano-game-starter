@@ -14,6 +14,7 @@
 
 import * as THREE from "three";
 import { DEFAULT_RECORD, TOPS, createCharacter, fromLegacy, isLook, unpackRecord, type Character as NanoterraBody, type LookRecord } from "@nano133/nanoterra/character";
+import { createEmotes, type LocalEmotes } from "@nano133/nanoterra/emotes/player";
 import type { Outfit } from "../../shared/looks";
 import type { Avatar, NanoterraPlayer } from "./character";
 import { buildHat, disposeHat } from "./hat";
@@ -37,9 +38,17 @@ export class NanoterraCharacter implements Avatar {
   private models: { slot: ModelSlot; model: WornModel }[] = [];
   private dressing = 0;
   private loading: Promise<unknown>[] = [];
+  /**
+   * Nanoterra's emotes on this body (the wheel's picks, main.ts). `body.update` plays them over the walk: a whole-body one (Dance, Sit) stops when
+   * the character moves or jumps, an upper-body one (Clap, Point) plays on over the walk. The clips load when the wheel first opens, not with the game.
+   * A multiplayer game passes `{ onEmote: (e) => send(emoteMessage(e)) }` here and plays the others' with `playRemote(theirBody, { id })` (the kit's README, "Emotes").
+   */
+  private readonly emotes: LocalEmotes;
 
   constructor(private readonly ramp: THREE.Texture) {
+    // Less motion starts as the device asks; the game sets the player's own setting (Options) right after.
     this.body = createCharacter({ record: this.rec, reducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches });
+    this.emotes = createEmotes(this.body);
     this.group = this.body.object;
     this.group.scale.setScalar(SCALE);
     this.body.socket("head").add(this.mount);
@@ -74,6 +83,18 @@ export class NanoterraCharacter implements Avatar {
 
   async ready() {
     await Promise.all(this.loading);
+  }
+
+  get reducedMotion() {
+    return this.body.reducedMotion;
+  }
+
+  set reducedMotion(on: boolean) {
+    this.body.reducedMotion = on;
+  }
+
+  emote(id: string) {
+    return this.emotes.play(id);
   }
 
   release() {

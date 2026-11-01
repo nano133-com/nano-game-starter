@@ -13,6 +13,8 @@ straight to your own wallet. You change the game with your AI assistant.
 - **Fair looks.** Every look shows its price. Nothing is random, and there are no loot boxes. A look
   never changes a score.
 - **Phones first.** A thumbstick on the left, camera on the right. Keyboard and mouse on a computer.
+- **Options and emotes.** An Options key (camera speed, the stick's side, less motion, quality, the Jump key) and Nano Island's
+  emote wheel (Wave, Cheer, Dance and eight more) for the Nanoterra character.
 
 ## Launch your game in 6 steps
 
@@ -150,10 +152,10 @@ To switch it on:
 What a player signed in from Nanoterra gets here: a session for the address Nanoterra named. It can show the player's name,
 own looks and order looks like any signed-in player. It **never opens `/admin`**: only a wallet signature does.
 
-**Two switches in `/admin` (the "Game" card).** Open `/admin` and look at **Game**. It has two switches (and the friends list's choice, see "The friends list"): **Players use their Nanoterra
+**Two switches in `/admin` (the "Game" card).** Open `/admin` and look at **Game**. It has two switches (and the friends list's choice, see "The friends list", and "Allow Nanoterra emotes", see "Options and emotes"): **Players use their Nanoterra
 character** and **Players can sign in with Nanoterra**. A press saves at once: you push nothing and deploy nothing. They start from the words in
 `game.config.json` (`"character"` and `"signin"`), and a press in `/admin` wins; the Worker reads the choice at run time and keeps it in your own database
-(rows of the `meta` table: `setting:character`, `setting:signin`, and `setting:friends` for the friends list). The card changes only these settings, never a look, a price or an order.
+(rows of the `meta` table: `setting:character`, `setting:signin`, `setting:friends` for the friends list and `setting:emotes` for the emotes). The card changes only these settings, never a look, a price or an order.
 **The character switch needs the sign-in switch:** a player brings a Nanoterra character only by signing in from Nanoterra. **With sign-in Off, every player plays as the island's first
 character**, a player who signed in from Nanoterra before included: Off means Off (the page ignores the session's character while the switch is Off, `src/client/ui/player.ts`). The card says this
 under the character switch.
@@ -207,6 +209,18 @@ each player. The game tells friends where the player is in plain words ("Playing
 This starter has no "Delete my data" page. If you add one, call `friendsStore(env).forget(address)` (`src/worker/friends.ts`) from it, so the
 player's friends rows go too.
 
+## Options and emotes
+
+**Options.** The gear key in the top bar opens the player's settings, in two tabs: **Basic** (camera speed, and on a phone or a tablet
+the side of the move stick) and **Advanced** (invert look, less motion, quality, and on a computer the Jump key). A change works at once
+and stays in the player's browser. The settings are in `src/client/options.ts`: ask your AI assistant to add one ("add a setting that
+hides the gem arrows"); `AGENTS.md` says how. The panel is the package's (`@nano133/nanoterra/options`).
+
+**Emotes.** With the Nanoterra character, an **Emotes** key (above Jump on a phone) opens Nano Island's wheel: Wave, Cheer, Clap, Dance,
+Bow, Shrug, Laugh, Point, Sit, Facepalm and Spin, eight at a time (Edit changes which). Tap one, or hold the key and slide onto one; B
+opens it on a keyboard. The dances load only when the wheel first opens, so the game's first load stays small. In `/admin`, the Game
+card's **Allow Nanoterra emotes** turns them off (no key then). Your own animations can go on the same wheel (`AGENTS.md`, "Emotes").
+
 ## What it costs
 
 Cloudflare serves the game's files free, with no traffic limit. You pay only for many server calls.
@@ -253,6 +267,7 @@ The tests use a fake Nano node and keys made in the test: no network and no mone
 | `looks.json` | The looks, their prices in US dollars and what they change |
 | `public/looks/` | The looks' own 3D models (`.glb`), named in a look's `slots` |
 | `src/client/game/` | The 3D game: the island (`world.ts`), the character, the gems, the rules (`game.ts`) |
+| `src/client/options.ts` | The player's settings (the Options key) |
 | `public/art/` | The listing pictures (`wide.jpg` 1600×900, `tall.jpg` 900×1600) |
 
 Do not change the payment check, the reservation, the admin guard or the sign-in. `AGENTS.md` says why.

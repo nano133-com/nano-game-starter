@@ -17,20 +17,20 @@ import { sweep } from "./sweep";
 
 export { ADMIN_SESSION_MS };
 
-/** What the two switches are until /admin sets them: game.config.json's words. The friends list is not named: the package's default ("nanoterra") holds until /admin sets it. */
+/** What the two switches are until /admin sets them: game.config.json's words. The friends list and the emotes are not named: the package's defaults ("nanoterra", "on") hold until /admin sets them. */
 export const gameDefaults = { character: CONFIG.character, signin: CONFIG.signin } as const;
 
-/** The admin's store: this game's D1 tables (meta, orders, owned, and admin_logins for the sign-in list). It writes the "Game" card's settings (character, sign-in, friends list), and deletes the admin sessions for "Sign out everywhere". */
+/** The admin's store: this game's D1 tables (meta, orders, owned, and admin_logins for the sign-in list). It writes the "Game" card's settings (character, sign-in, friends list, emotes), and deletes the admin sessions for "Sign out everywhere". */
 export const gameStore = (env: Env) => createD1Store(env.DB, { logins: true });
 
 /**
- * The settings now: the "Game" card of /admin (the two switches and the friends list), or game.config.json's words when /admin has set none
- * (the friends list: the package's default, "nanoterra"). A database fault gives the defaults: the listing and the game's page must not break
+ * The settings now: the "Game" card of /admin (the two switches, the friends list and "Allow Nanoterra emotes"), or game.config.json's words when
+ * /admin has set none (the friends list and the emotes: the package's defaults, "nanoterra" and "on"). A database fault gives the defaults: the listing and the game's page must not break
  * because a setting could not be read. This is the ONE place the Worker reads them.
  */
 export async function settingsOf(env: Env): Promise<Required<GameSettings>> {
-  const { character, signin, friends } = await loadGameSettings(gameStore(env), gameDefaults);
-  return { character, signin, friends };
+  const { character, signin, friends, emotes } = await loadGameSettings(gameStore(env), gameDefaults);
+  return { character, signin, friends, emotes };
 }
 
 /** What only this game knows: its address, test mode and what is still off. The counts come from the store. */

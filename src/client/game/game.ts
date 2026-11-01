@@ -4,6 +4,7 @@
 import * as THREE from "three";
 import { CONFIG } from "../../shared/config";
 import type { Outfit } from "../../shared/looks";
+import { options } from "../options";
 import { makeAvatar, type Avatar, type NanoterraPlayer } from "./character";
 import { Controls } from "./controls";
 import { Gems } from "./gems";
@@ -17,6 +18,12 @@ const PLAYER_RADIUS = 0.45;
 const CAMERA_DISTANCE = 8.5;
 
 export type GameState = "ready" | "playing" | "over";
+
+/**
+ * The most pixels per CSS pixel for each "Quality" of Options. A phone screen has many pixels: 1.75 is sharp enough and keeps a mid-range phone
+ * smooth, so "high" is 1.75 on a touch screen and 2 elsewhere; "low" draws one pixel per CSS pixel, for a slow phone.
+ */
+const PIXEL_RATIO_CAP = { low: 1, medium: 1.5, high: { touch: 1.75, other: 2 } } as const;
 
 export type GameEvents = {
   score: (score: number) => void;
@@ -75,10 +82,8 @@ export class Game {
     hud: { stick: HTMLElement; knob: HTMLElement; jump: HTMLElement },
     private readonly on: GameEvents,
   ) {
-    const touch = matchMedia("(pointer: coarse)").matches;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-    // A phone screen has many pixels: 1.75 is sharp enough and keeps a mid-range phone smooth.
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, touch ? 1.75 : 2));
+    this.setQuality();
     view.appendChild(this.renderer.domElement);
     const ramp = toonRamp();
     this.ramp = ramp;
@@ -89,6 +94,12 @@ export class Game {
     this.scene.add(this.character.group, this.character.ground);
     this.gems = new Gems(this.scene, ramp, this.colliders, CONFIG.round.gems, CONFIG.round.goldEvery);
     this.controls = new Controls(view, hud.stick, hud.knob, hud.jump);
+    this.character.reducedMotion = options.get<boolean>("reducedMotion");
+    // Options: a change works at once, with no reload.
+    options.subscribe((key, value) => {
+      if (key === "quality") this.setQuality();
+      if (key === "reducedMotion") this.character.reducedMotion = value === true;
+    });
     this.resize();
     new ResizeObserver(() => this.resize()).observe(view);
     document.addEventListener("visibilitychange", () => {
@@ -98,12 +109,24 @@ export class Game {
     this.loop();
     // For automated checks (tests read it; the game never needs it).
     (window as unknown as { __gemIsland: unknown }).__gemIsland = {
-      snapshot: () => ({ state: this.state, score: this.score, x: this.player.x, z: this.player.z, yaw: this.yaw, pitch: this.pitch, pixelRatio: this.renderer.getPixelRatio() }),
+      snapshot: () => ({ state: this.state, score: this.score, x: this.player.x, y: this.player.y, z: this.player.z, yaw: this.yaw, pitch: this.pitch, pixelRatio: this.renderer.getPixelRatio() }),
     };
+  }
+
+  /** The pixel ratio for the "Quality" of Options (`setPixelRatio` sizes the canvas again by itself). */
+  private setQuality() {
+    const q = options.get<"low" | "medium" | "high">("quality");
+    const cap = q === "high" ? (matchMedia("(pointer: coarse)").matches ? PIXEL_RATIO_CAP.high.touch : PIXEL_RATIO_CAP.high.other) : PIXEL_RATIO_CAP[q];
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, cap));
   }
 
   wear(look: Outfit) {
     this.character.wear(look);
+  }
+
+  /** Plays an emote of the wheel on the player's character (main.ts). False for a character that has none (the penguin). */
+  emote(id: string): boolean {
+    return this.character.emote(id);
   }
 
   /**
@@ -124,6 +147,7 @@ export class Game {
       });
     }
     this.character = makeAvatar(this.ramp, kind);
+    this.character.reducedMotion = options.get<boolean>("reducedMotion");
     this.characterKind = kind;
     this.scene.add(this.character.group, this.character.ground);
   }

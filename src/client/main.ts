@@ -6,7 +6,14 @@ import { FREE_LOOK, isOutfit, outfitById, type Look, type Outfit } from "../shar
 import { pauseWhenLeft } from "@nano133/nanoterra/input";
 import { mountFriends, type MountedFriends } from "@nano133/nanoterra/friends/panel";
 import "@nano133/nanoterra/friends/style.css";
+import { mountOptions, optionSection } from "@nano133/nanoterra/options";
+import "@nano133/nanoterra/options/style.css";
+import { EMOTE_KEY_OPTION, EMOTE_OPTION_DEFS } from "@nano133/nanoterra/emotes";
+import { loadEmotes } from "@nano133/nanoterra/emotes/player";
+import { mountEmotes } from "@nano133/nanoterra/emotes/wheel";
+import "@nano133/nanoterra/emotes/style.css";
 import { Game } from "./game/game";
+import { GAME_KEY, options } from "./options";
 import { ApiError, get, post, type Config, type Me, type Order } from "./ui/api";
 import { h, shortAddress } from "./ui/dom";
 import { looksView } from "./ui/looks";
@@ -55,6 +62,8 @@ const pausedCard = $("paused");
 // display: none, never remove it). `where` is plain text that the player's friends see.
 let friends: MountedFriends | null = null;
 let friendsOpen = false;
+let optionsOpen = false;
+let wheelOpen = false;
 let atLooks = false;
 
 function whereNow(): string {
@@ -67,9 +76,9 @@ function showWhere() {
   friends?.setWhere(whereNow());
 }
 
-/** A sheet or the friends panel over the game stops a free round, as the paused card does. */
+/** A sheet, the friends panel, the options panel or the emote wheel over the game stops a free round, as the paused card does. */
 function holdGame() {
-  const held = sheet.open || friendsOpen;
+  const held = sheet.open || friendsOpen || optionsOpen || wheelOpen;
   game.paused = held || !pausedCard.hidden;
   game.controls.enabled = !held && pausedCard.hidden;
   if (held) game.controls.release();
@@ -89,6 +98,53 @@ function startFriends() {
     }).observe(panel, { attributes: true, attributeFilter: ["data-open"] });
 }
 
+// ---- options ----
+// The gear key in the HUD and the kit's panel (Basic and Advanced). The settings themselves are in options.ts; the game reads them where it uses them.
+mountOptions($("options"), options, {
+  onOpen: () => {
+    optionsOpen = true;
+    holdGame();
+  },
+  onClose: () => {
+    optionsOpen = false;
+    holdGame();
+  },
+});
+
+// A closed panel gives the focus back to its key (for a keyboard player). A press on the game takes it away again, so a key the game does not
+// use (Space, after Jump moved to another key) does not press the HUD key that still has the focus.
+$("view").addEventListener("pointerdown", () => {
+  if (document.activeElement instanceof HTMLElement && document.activeElement !== document.body) document.activeElement.blur();
+});
+
+// ---- emotes ----
+// Nanoterra's eleven emotes on the wheel, for the Nanoterra character only (the penguin has none). The admin's "Allow Nanoterra emotes" (GET
+// /api/config `emotes`) can take them off; then there is no key. The clips load when the wheel first opens (`loadEmotes`), never with the game.
+// This game is single-player: a multiplayer game sends each emote to the others from the character's `onEmote` (nanoterraCharacter.ts) and plays
+// theirs with `playRemote` from "@nano133/nanoterra/emotes/player" (the kit's README, "Emotes").
+function startEmotes() {
+  if ((config.character ?? CONFIG.character) !== "nanoterra" || config.emotes === "off") return;
+  // The wheel's settings join the panel only when the wheel is there: "Show the Emotes key" and its key on a keyboard (B). "Show other players'
+  // emotes" is left out: one player sees no other. A multiplayer game adds all three: `options.add(EMOTE_OPTIONS)`.
+  options.add([...optionSection("emotes", EMOTE_OPTION_DEFS.filter((d) => d.key === "show"), "Emotes"), EMOTE_KEY_OPTION]);
+  const root = $("emotes");
+  mountEmotes(root, {
+    game: GAME_KEY,
+    onPlay: (id) => void game.emote(id),
+    onOpen: () => void loadEmotes(),
+    nanoterraEmotes: config.emotes ?? "on",
+    options,
+    // B opens the wheel only while nothing else is over the game.
+    keyAllowed: () => !(sheet.open || friendsOpen || optionsOpen) && pausedCard.hidden,
+  });
+  const layer = root.querySelector<HTMLElement>(".n133e-layer");
+  if (layer)
+    new MutationObserver(() => {
+      wheelOpen = layer.dataset.open === "true";
+      holdGame();
+    }).observe(layer, { attributes: true, attributeFilter: ["data-open"] });
+}
+
 sheet.onOpenChange = (open) => {
   // The paused card keeps the round stopped when a sheet closes under it.
   if (!open) atLooks = false;
@@ -102,7 +158,7 @@ sheet.onOpenChange = (open) => {
 // This is for a FREE round. If you make a round cost money, keep the controls' release but do not stop its clock:
 // a paid round's deadline must not move (the nano133 arcade follows the same rule).
 function pauseForLeave() {
-  if (!game.playing || !pausedCard.hidden || sheet.open || friendsOpen) return;
+  if (!game.playing || !pausedCard.hidden || sheet.open || friendsOpen || optionsOpen || wheelOpen) return;
   game.paused = true;
   game.controls.enabled = false;
   game.controls.release();
@@ -284,4 +340,5 @@ accountBtn.addEventListener("click", () => {
   renderAccount();
   dress();
   startFriends();
+  startEmotes();
 })();

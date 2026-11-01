@@ -278,6 +278,78 @@ body {
   }
 }
 
+/* ---- the Options key (@nano133/nanoterra/options) ----
+   The first key of the HUD's right group. The kit's panel is a sheet from the bottom on a phone held upright and from the right on a wide or
+   sideways screen; the game holds still while it is open (main.ts). */
+
+.options,
+.emotes {
+  --n133-font: var(--font);
+  --n133-ink: var(--ink);
+  --n133-ink-soft: var(--ink-soft);
+  --n133-paper: var(--paper);
+  --n133-line: var(--line);
+  --n133-gem: var(--gem);
+  --n133-gem-dark: var(--gem-dark);
+  --n133-radius: var(--radius);
+}
+
+.options {
+  display: contents;
+}
+
+#options .n133o-key,
+#emotes .n133e-key {
+  border: 0;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 4px 14px rgba(10, 30, 60, 0.18);
+}
+
+/* A narrow phone: the gear only, as the Friends key. The word stays for screen readers (the key's name). */
+@media (max-width: 480px) {
+  #options .n133o-key {
+    padding: 0 12px;
+  }
+  #options .n133o-key-word {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* ---- the Emotes key (@nano133/nanoterra/emotes) ----
+   On a touch screen it sits right above Jump, under the same thumb, clear of the thumbstick (the other half) and the camera drag. With a mouse
+   (no Jump key) it takes Jump's corner. The wheel itself opens in the middle of the screen. */
+
+.emotes {
+  position: absolute;
+  right: max(22px, env(safe-area-inset-right));
+  bottom: calc(max(26px, env(safe-area-inset-bottom)) + 84px + 14px);
+}
+
+@media (pointer: fine) {
+  .emotes {
+    bottom: max(22px, env(safe-area-inset-bottom));
+  }
+}
+
+/* "Move stick: Right" (Options): the stick takes the right half, so Jump and Emotes go to the left thumb. */
+@media (pointer: coarse) {
+  html[data-n133-opt-stick-side="right"] :is(.jump, .emotes) {
+    right: auto;
+    left: max(22px, env(safe-area-inset-left));
+  }
+}
+
+/* "Less motion" (Options): the page's own movement stops too. */
+html[data-n133-opt-reduced-motion="true"] :is(.hud, .overlay, .jump, .emotes) * {
+  transition: none !important;
+  animation: none !important;
+}
+
 /* ---- start and end ---- */
 
 .overlay {

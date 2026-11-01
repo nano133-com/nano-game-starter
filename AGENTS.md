@@ -13,10 +13,11 @@ creator's address. The Worker holds **no key**: it only reads the Nano ledger to
 | Path | What |
 |---|---|
 | `game.config.json` | Name, one line, creator name, listing pictures, round length, the defaults of the two switches (`"character"`, `"signin"`), and `"nanoterraId"` (the game's listing id on Nanoterra, or `null`; checked in `src/shared/config.ts`). Safe to change. |
-| `src/worker/admin.ts`, `src/client/admin.ts` | The admin (`/admin`) **is the package** `@nano133/nanoterra` (paths `/admin`, `/admin/d1`, `/admin/panel`, `/admin/style.css`): the guard, the routes, the D1 store, the panel with the "Game" card (two switches and the friends list's choice, kept in the `meta` table as `setting:character`, `setting:signin` and `setting:friends`), the Shelf, the orders. These two files only give the package what is this game's own: the owner, the admin session, the status, the looks and the wallet sign-in. See "Rules for looks" (the Shelf never writes) and the admin guard below. |
+| `src/worker/admin.ts`, `src/client/admin.ts` | The admin (`/admin`) **is the package** `@nano133/nanoterra` (paths `/admin`, `/admin/d1`, `/admin/panel`, `/admin/style.css`): the guard, the routes, the D1 store, the panel with the "Game" card (two switches, the friends list's choice and "Allow Nanoterra emotes", kept in the `meta` table as `setting:character`, `setting:signin`, `setting:friends` and `setting:emotes`), the Shelf, the orders. These two files only give the package what is this game's own: the owner, the admin session, the status, the looks and the wallet sign-in. See "Rules for looks" (the Shelf never writes) and the admin guard below. |
 | `looks.json` | The looks: `id`, `name`, `priceUsd`, and `change` (`body` colour, optional `hat` and `hatColor`), and optional `slots` (a model in `head`, `hand` or `back`). Safe to change, with the rules below. |
 | `public/looks/` | The looks' models (`.glb`). Each passes `test/lookModels.test.ts`. |
 | `src/client/game/` | The game: `world.ts` (the level), `character.ts` (what a character does, and the penguin), `nanoterraCharacter.ts` (the Nanoterra character), `hat.ts`, `gems.ts`, `controls.ts` (keys and thumbs; they let go when the page is left: `releaseWhenLost` from `@nano133/nanoterra/input`), `game.ts` (rules, speed, camera). `main.ts` pauses a free round when the player leaves the page (`pauseWhenLeft`, same path) and keeps it paused until Resume; a round that costs money must not stop its clock. Safe to change. |
+| `src/client/options.ts` | The player's settings (`@nano133/nanoterra/options`): one store, kept in this browser (`n133-options:gem-island`), with the Options key and panel mounted in `main.ts`. See "The options menu" below. |
 | `src/client/ui/`, `src/client/style.css` | The sheets (looks, sign-in, pay) and the look of the page. Change with care (see "Never change"). |
 | `public/` | Static files: `art/wide.jpg`, `art/tall.jpg`, `favicon.svg`, and `nanoterra.css` (the look of the sign-in pages: see "Safe changes"). |
 | `src/worker/` | The server. Money and sign-in live here. See "Never change". |
@@ -86,8 +87,8 @@ npm run check      # typecheck + tests + build: run it before every commit
   copy them. (The old check refused $0.07, $0.29 and $1.10: `wholeCents` fixes that.)
 - **The Shelf (`/admin`) never writes.** It edits a draft in the creator's browser and gives text to copy. Do not add a server call that
   changes `looks.json`, the database's looks or prices: an editor would give the server a new way to change data. A change of looks is a
-  change of the repository, pushed to GitHub. **The "Game" card is not the Shelf:** its two switches and the friends list (`POST /api/admin/game`) write only the three
-  settings `setting:character`, `setting:signin` and `setting:friends`, behind the same admin guard; the route takes nothing else, and the package's store contract (run in
+  change of the repository, pushed to GitHub. **The "Game" card is not the Shelf:** its two switches, the friends list and the emotes (`POST /api/admin/game`) write only the four
+  settings `setting:character`, `setting:signin`, `setting:friends` and `setting:emotes`, behind the same admin guard; the route takes nothing else, and the package's store contract (run in
   `test/adminConformance.test.ts`) proves that saving changes no other `meta` row, order or owned look. Keep it that way: never add a looks, price, order or address field to it.
 - `GITHUB_REPO` (a setting, `owner/name`) only makes the Shelf link to `looks.json`. It is not a secret and it gives the game no GitHub access.
 
@@ -104,6 +105,38 @@ npm run check      # typecheck + tests + build: run it before every commit
   `friendsStoreConformance` on the real D1 tables, and pins the refusals.
 - The window's frame comes from `https://nano133.com` (`frame-src` in `src/shared/security.ts`). Do not add another origin for it.
 - There is no "Delete my data" yet. A page that adds one calls `friendsStore(env).forget(address)` too.
+
+## The options menu
+
+- `src/client/options.ts` makes ONE store (`createOptions`, `@nano133/nanoterra/options`) with only the settings the game honours: Camera speed, Move stick (a phone
+  and a tablet), Invert look, Less motion, Quality, and the Jump key (a desktop). The browser keeps only what differs from the device's default, under
+  `n133-options:gem-island`. `main.ts` mounts the gear key in `#options` (the HUD's right group) with `mountOptions`, and holds the round still while the panel is open,
+  as it does for the sheets and the friends panel (`holdGame`).
+- Where each one works: `controls.ts` reads Camera speed (50 is the game's own speed: `TOUCH_LOOK` and `MOUSE_LOOK` times value / 50), Invert look, Move stick (the
+  stick's half of the screen; `style.css` moves Jump and Emotes to the other side) and the Jump key (`keys.jump`, a `KeyboardEvent.code`); `game.ts` sets the
+  pixel ratio from Quality (low 1, medium 1.5, high 1.75 on a touch screen and 2 elsewhere) and gives Less motion to the character; `style.css` calms the HUD with
+  `html[data-n133-opt-reduced-motion="true"]` (`reflectOptions`). Each value is read when it is used, or followed with `options.subscribe`, so a change works at once.
+- **To add a setting:** add its def to `defs` in `options.ts` (a kit setting by name with `common("...")`, or your own: `{ kind: "toggle", key: "hints", label:
+  "Show hints", tab: "basic", group: "Game", default: true }`; kinds `"toggle"`, `"choice"`, `"range"` and `"key"`), read it with `options.get("hints")` where the game
+  uses it, and follow a change with `options.subscribe`. Offer only what the game really does (the starter has no sound, so it offers no volume). Never keep a second
+  copy of a setting in your own storage, and never use a setting for a rule, a score or a price. The kit's README ("The options menu") has every field.
+
+## Emotes
+
+- Nanoterra's eleven emotes (Wave, Cheer, Clap, Dance, Bow, Shrug, Laugh, Point, Sit, Facepalm, Spin) on the kit's wheel (`@nano133/nanoterra/emotes`), for the
+  Nanoterra character only: the penguin has none. `main.ts` mounts the Emotes key in `#emotes` (above Jump on a touch screen) once `/api/config` has answered, and
+  only then adds the wheel's own settings to the options ("Show the Emotes key" and the wheel's key, B; a multiplayer game adds all of `EMOTE_OPTIONS`, with "Show
+  other players' emotes"). The round
+  holds still while the wheel is open. `nanoterraCharacter.ts` plays a pick (`createEmotes(body).play(id)`); the character's `update` plays it over the walk, and a
+  move or a jump ends a whole-body one (Dance, Sit).
+- **The clips load only when the wheel first opens** (`loadEmotes`, a chunk of its own, `clips-<hash>.js`, and the pictures `icons-<hash>.webp`). Never import the
+  clips yourself: they must stay out of the first load.
+- **The admin's switch:** the Game card's "Allow Nanoterra emotes" (`emotes`, `"on"` by default, or `"off"`) is read in ONE place, `settingsOf`, and given in
+  `GET /api/config` as `emotes`. Off: no key and no wheel (a game with its own emotes keeps those on the wheel; see below).
+- **A game's own emotes:** give the wheel the list, Nanoterra's ids and your own: `mountEmotes(el, { ..., emotes: ["wave", "dance", { id: "flip", label: "Flip",
+  icon: "/art/flip.png" }], onPlay: (id) => (id === "flip" ? myFlip() : game.emote(id)) })`. An emote is display only: never a score, a rule or a price.
+- **Multiplayer** (the starter is single-player): send each emote from `createEmotes(body, { onEmote: (e) => send(emoteMessage(e)) })` and play the others' with
+  `playRemote(theirBody, { id: readEmoteMessage(message) }, { options })`, and add `EMOTE_OPTIONS` to the store; with `emotes` `"off"`, send none and play none. The kit's README ("Emotes") has the rest.
 
 ## Never change (without the creator's clear yes, and new tests)
 
@@ -172,4 +205,4 @@ the risk first, then change it only with tests in `test/` that show the new rule
 - The Nautilus app and NanChat's relay server post to `/api/signin/nautilus` and `/api/signin/nanchat`.
   If a firewall rule (for example Bot Fight Mode) stands in front of the game, it must let them through.
 - `/nano-game.json` is the listing for Nano Island. It never lists looks or prices.
-- `window.__gemIsland.snapshot()` gives the game's state to automated browser checks.
+- `window.__gemIsland.snapshot()` gives the game's state to automated browser checks (the place `x`, `y`, `z`, the camera's `yaw` and `pitch`, the `pixelRatio`).
