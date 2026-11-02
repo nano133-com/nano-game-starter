@@ -133,7 +133,7 @@ const host = (base: string = ORIGIN): ConformanceHost => {
 };
 
 describe("the package's admin conformance suite, run against this game's own sessions, store and Worker", () => {
-  for (const c of adminConformance(host())) it(c.name, c.run);
+  for (const c of adminConformance(host())) it(c.name, c.run, c.timeoutMs);
 });
 
 /** The game's own sign-in chain, driven for the kit's contract: Berry Wallet or Nautilus, started for the game or for the admin, signed by the owner, finished by a browser. */
@@ -189,7 +189,7 @@ describe("the kit's sign-in chain contract, run against this game's own sign-in 
 });
 
 describe("the same suite over https, where the cookies are __Host-session and __Host-admin", () => {
-  for (const c of adminConformance(host("https://game.test"))) it(`[https] ${c.name}`, c.run);
+  for (const c of adminConformance(host("https://game.test"))) it(`[https] ${c.name}`, c.run, c.timeoutMs);
 });
 
 describe("the package's store contract, run against this game's D1 store and its real tables", () => {
