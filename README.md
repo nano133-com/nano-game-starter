@@ -171,10 +171,10 @@ To switch it on:
 What a player signed in from Nanoterra gets here: a session for the address Nanoterra named. It can show the player's name,
 own looks and order looks like any signed-in player. It **never opens `/admin`**: only a wallet signature does (or a passkey that the wallet linked).
 
-**Two switches in `/admin` (the "Game" card).** Open `/admin` and look at **Game**. It has two switches (and the friends list's choice, see "The friends list", and "Allow Nanoterra emotes", see "Options and emotes"): **Players use their Nanoterra
+**Two switches in `/admin` (the "Game" card).** Open `/admin` and look at **Game**. It has two switches (and the friends list's choice, see "The friends list", "Allow Nanoterra emotes", see "Options and emotes", and "Free play", below): **Players use their Nanoterra
 character** and **Players can sign in with Nanoterra**. A press saves at once: you push nothing and deploy nothing. They start from the words in
 `game.config.json` (`"character"` and `"signin"`), and a press in `/admin` wins; the Worker reads the choice at run time and keeps it in your own database
-(rows of the `meta` table: `setting:character`, `setting:signin`, `setting:friends` for the friends list and `setting:emotes` for the emotes). The card changes only these settings, never a look, a price or an order.
+(rows of the `meta` table: `setting:character`, `setting:signin`, `setting:friends` for the friends list, `setting:emotes` for the emotes and `setting:freePlay` for free play). The card changes only these settings, never a look, a price or an order.
 **The character switch needs the sign-in switch:** a player brings a Nanoterra character only by signing in from Nanoterra. **With sign-in Off, every player plays as the island's first
 character**, a player who signed in from Nanoterra before included: Off means Off (the page ignores the session's character while the switch is Off, `src/client/ui/player.ts`). The card says this
 under the character switch.
@@ -182,6 +182,10 @@ Turning sign-in off changes the `signin` word of your listing file (`/nano-game.
 Nanoterra (`/nanoterra/start`, the callback and Continue) at once, so a link made before signs nobody in. **For a game that is listed, Nanoterra's review
 decides what Nanoterra shows:** the sign-in word is part of your listing file, and a change to a listed game's file waits for that review. The card cannot
 see the review, so it says so and links to Nanoterra's launch page (step 6).
+
+**Free play** (the Game card's fifth switch, kit 0.14.0) is On by default, and the listing file says `"freePlay": true`. Off makes it `false`: it says that a
+player must pay in the game to play, and Nanoterra's listing then says "Paid". The switch only says so: your game itself must ask for the payment, and
+every payment goes to a wallet that you hold the key for. Like the sign-in word, the change waits for Nanoterra's review of a listed game.
 
 **The character.** One switch, in one file (and now in `/admin`, as above): `game.config.json` says `"character": "nanoterra"` (the default) or `"own"`. Nothing else reads it
 (the listing file `nano-game.json` does not carry it). With `"nanoterra"` the player is the Nanoterra island character, drawn by the package
@@ -303,6 +307,15 @@ npm run check                     # types, tests and build
 ```
 
 The tests use a fake Nano node and keys made in the test: no network and no money.
+
+## Moving to a new kit version
+
+Move the kit with `npm install @nano133/nanoterra@<version>`, then run `npm run check`. Read the kit's CHANGELOG for each version you skip.
+
+- **0.14.0 (free play):** the store contract in `test/adminConformance.test.ts` fails ("the rows of the game changed after saving the settings")
+  until its `snapshot()` leaves out the new setting row too: add `'setting:freePlay'` to its list `NOT IN ('setting:character', ...)`. Then
+  read the setting in `settingsOf` (`src/worker/admin.ts`) and write `freePlay: freePlayOn(settings)` in `listing()` (`src/worker/index.ts`).
+  No migration: the setting is a row of `meta`.
 
 ## Files you will change
 

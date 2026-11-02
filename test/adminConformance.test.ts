@@ -271,7 +271,7 @@ describe("the package's store contract, run against this game's D1 store and its
       },
       async snapshot() {
         const q = async (sql: string) => JSON.stringify((await db.prepare(sql).all()).results);
-        return [await q("SELECT * FROM orders ORDER BY id"), await q("SELECT * FROM owned ORDER BY player, look_id"), await q("SELECT * FROM meta WHERE key NOT IN ('setting:character', 'setting:signin', 'setting:friends', 'setting:emotes', 'salt') ORDER BY key")].join("|");
+        return [await q("SELECT * FROM orders ORDER BY id"), await q("SELECT * FROM owned ORDER BY player, look_id"), await q("SELECT * FROM meta WHERE key NOT IN ('setting:character', 'setting:signin', 'setting:friends', 'setting:emotes', 'setting:freePlay', 'salt') ORDER BY key")].join("|");
       },
     };
   };

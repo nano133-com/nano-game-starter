@@ -1,7 +1,7 @@
 // The game's Worker: the API under /api, the listing at /nano-game.json, and the payment scan every
 // 10 minutes. The game's files (index.html, admin.html, /assets) are served by Cloudflare without it.
 
-import { signinOn, type Signin } from "@nano133/nanoterra/admin";
+import { freePlayOn, signinOn, type GameSettings } from "@nano133/nanoterra/admin";
 import { SHOP_LIMITS } from "@nano133/nanoterra/shop/worker";
 import { CONFIG } from "../shared/config";
 import { adminHandler, adminSigninOf, settingsOf } from "./admin";
@@ -16,10 +16,11 @@ import { warm } from "./warm";
 if (!warm) console.warn("the signature warm-up check failed");
 
 /**
- * The listing that Nano Island reads. It never lists looks or prices: the sale is the creator's own. `signin` is the switch of /admin (or
- * game.config.json's word): the listing file says how the game signs a Nanoterra player in.
+ * The listing that Nano Island reads. It never lists looks or prices: the sale is the creator's own. `signin` and `freePlay` are switches of /admin
+ * (`signin` starts from game.config.json's word, free play is on until /admin turns it off): the listing file says how the game signs a Nanoterra
+ * player in, and whether it has free play.
  */
-export function listing(env: Env, req: Request, signin: Signin = CONFIG.signin) {
+export function listing(env: Env, req: Request, settings: Pick<GameSettings, "signin" | "freePlay"> = { signin: CONFIG.signin }) {
   const origin = new URL(req.url).origin;
   return {
     nanoGame: 1,
@@ -32,7 +33,9 @@ export function listing(env: Env, req: Request, signin: Signin = CONFIG.signin) 
     regions: CONFIG.regions,
     ages: CONFIG.ages,
     // How this game signs a Nanoterra player in ("exchange": /nanoterra/start keeps a state and /nanoterra/callback trades a one-time code for the player's details).
-    signin,
+    signin: settings.signin,
+    // Free play (the Game card's "Free play", on by default): false says a player must pay in the game to play, and Nanoterra's listing then says "Paid".
+    freePlay: freePlayOn(settings),
     // The character is NOT here: its switch is the "Game" card of /admin (or "character" in game.config.json, "nanoterra" or "own"), and only the game's own code reads it.
   };
 }
@@ -147,7 +150,7 @@ export default {
     try {
       if (path === "/nano-game.json" && (req.method === "GET" || req.method === "HEAD")) {
         // 60 seconds, not 300: a switch of /admin shows in the listing within a minute.
-        return secure(json(listing(env, req, (await settingsOf(env)).signin), 200, { "Cache-Control": "public, max-age=60" }), false);
+        return secure(json(listing(env, req, await settingsOf(env)), 200, { "Cache-Control": "public, max-age=60" }), false);
       }
       // Sign-in from Nanoterra is a switch of /admin: while it is off, a link made before signs nobody in. ("Not me" always works.)
       if ((path === "/nanoterra/start" || path === "/nanoterra/callback" || path === "/nanoterra/confirm") && !signinOn((await settingsOf(env)).signin)) return secure(signinOff(), false);

@@ -81,7 +81,7 @@ describe("the Game switches through the Worker", () => {
     const r = await (await adminIn(owner.address)).call(live(), "/api/admin/game");
     expect(r.status).toBe(200);
     // The friends list and the emotes are the package's own defaults ("nanoterra", "on"): game.config.json does not name them.
-    expect(r.body).toEqual({ character: CONFIG.character, signin: CONFIG.signin, friends: "nanoterra", emotes: "on", fromAdmin: { character: false, signin: false, friends: false, emotes: false } });
+    expect(r.body).toEqual({ character: CONFIG.character, signin: CONFIG.signin, friends: "nanoterra", emotes: "on", freePlay: "on", fromAdmin: { character: false, signin: false, friends: false, emotes: false, freePlay: false } });
   });
 
   it("a press is saved, read back, and kept in two meta rows with their own prefix", async () => {
@@ -207,11 +207,20 @@ describe("the Worker reads the switches at run time", () => {
     expect((await (await fetchAs(live(), "/nano-game.json")).json()).signin).toBe("exchange");
   });
 
+  it("the listing file's freePlay follows the Free play switch: true by default, false after Off", async () => {
+    const b = await adminIn(owner.address);
+    expect((await (await fetchAs(live(), "/nano-game.json")).json()).freePlay).toBe(true);
+    await b.call(live(), "/api/admin/game", { method: "POST", body: { freePlay: "off" } });
+    expect((await (await fetchAs(live(), "/nano-game.json")).json()).freePlay).toBe(false);
+    await b.call(live(), "/api/admin/game", { method: "POST", body: { freePlay: "on" } });
+    expect((await (await fetchAs(live(), "/nano-game.json")).json()).freePlay).toBe(true);
+  });
+
   it("the character switch is not in the listing file, and nothing else in it changed", async () => {
     const b = await adminIn(owner.address);
     await b.call(live(), "/api/admin/game", { method: "POST", body: { character: "own" } });
     const file = await (await fetchAs(live(), "/nano-game.json")).json();
-    expect(Object.keys(file).sort()).toEqual(["ages", "art", "creator", "line", "multiplayer", "name", "nanoGame", "play", "regions", "signin"]);
+    expect(Object.keys(file).sort()).toEqual(["ages", "art", "creator", "freePlay", "line", "multiplayer", "name", "nanoGame", "play", "regions", "signin"]);
   });
 
   it("with sign-in off, the start, the callback and Continue answer 'off' and a link made before signs nobody in; 'Not me' still works", async () => {
@@ -235,6 +244,8 @@ describe("the Worker reads the switches at run time", () => {
     const broken = { ...live(), DB: { prepare: () => { throw new Error("D1 is down"); } } as unknown as D1Database };
     const file = await fetchAs(broken, "/nano-game.json");
     expect(file.status).toBe(200);
-    expect((await file.json()).signin).toBe(CONFIG.signin);
+    const body = await file.json();
+    expect(body.signin).toBe(CONFIG.signin);
+    expect(body.freePlay).toBe(true);
   });
 });

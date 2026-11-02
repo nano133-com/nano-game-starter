@@ -59,13 +59,13 @@ export function gameStore(env: Env): AdminStore {
 }
 
 /**
- * The settings now: the "Game" card of /admin (the two switches, the friends list and "Allow Nanoterra emotes"), or game.config.json's words when
+ * The settings now: the "Game" card of /admin (the two switches, the friends list, "Allow Nanoterra emotes" and "Free play"), or game.config.json's words when
  * /admin has set none (the friends list and the emotes: the package's defaults, "nanoterra" and "on"). A database fault gives the defaults: the listing and the game's page must not break
  * because a setting could not be read. This is the ONE place the Worker reads them.
  */
 export async function settingsOf(env: Env): Promise<Required<GameSettings>> {
-  const { character, signin, friends, emotes } = await loadGameSettings(gameStore(env), gameDefaults);
-  return { character, signin, friends, emotes };
+  const { character, signin, friends, emotes, freePlay } = await loadGameSettings(gameStore(env), gameDefaults);
+  return { character, signin, friends, emotes, freePlay };
 }
 
 /** What only this game knows: its address, test mode, the nodes and what is still off (the shop's status), and its own warnings. The counts come from the store. */

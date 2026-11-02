@@ -124,9 +124,10 @@ never leave a white screen or a loader that does not end. Six rules:
   copy them. (The old check refused $0.07, $0.29 and $1.10: `priceStepOk` and `wholeCents` compare a price with its own decimal text.)
 - **The Shelf (`/admin`) never writes.** It edits a draft in the creator's browser and gives text to copy. Do not add a server call that
   changes `looks.json`, the database's looks or prices: an editor would give the server a new way to change data. A change of looks is a
-  change of the repository, pushed to GitHub. **The "Game" card is not the Shelf:** its two switches, the friends list and the emotes (`POST /api/admin/game`) write only the four
-  settings `setting:character`, `setting:signin`, `setting:friends` and `setting:emotes`, behind the same admin guard; the route takes nothing else, and the package's store contract (run in
+  change of the repository, pushed to GitHub. **The "Game" card is not the Shelf:** its two switches, the friends list, the emotes and free play (`POST /api/admin/game`) write only the five
+  settings `setting:character`, `setting:signin`, `setting:friends`, `setting:emotes` and `setting:freePlay`, behind the same admin guard; the route takes nothing else, and the package's store contract (run in
   `test/adminConformance.test.ts`) proves that saving changes no other `meta` row, order or owned look. Keep it that way: never add a looks, price, order or address field to it.
+  A kit version that adds a setting row (0.14.0: `setting:freePlay`) needs that row in the test's `snapshot()` list `NOT IN (...)`, or the contract fails: README, "Moving to a new kit version".
 - `GITHUB_REPO` (a setting, `owner/name`) only makes the Shelf link to `looks.json`. It is not a secret and it gives the game no GitHub access.
 
 ## The friends list
