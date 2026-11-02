@@ -160,7 +160,7 @@ Both come from the package `@nano133/nanoterra` (since 0.9.0). The game does not
   the two new vectors that `test/scheme.test.ts` prints into that test. After the first player, never change a character of it, and never change the vectors
   to make the test pass: every passkey player would lose their looks. A new scheme is a new `versionByte` with new texts, never an edit.
 - **No passkey on `*.workers.dev`.** A passkey belongs to one domain for good, and a game on the preview address moves to its own domain later. So on
-  `*.workers.dev` the sign-in sheet offers the wallet apps only (the package's default; do not pass `passkey: true`), and `/admin` says "Passkeys turn on when your
+  `*.workers.dev` the sign-in sheet offers the wallet apps only (the package's default; do not pass `passkey: true`), `/admin` offers no owner passkey, and `/admin` says "Passkeys turn on when your
   game has its own domain." (`mountAdmin(..., { playerPasskeys: true })` in `src/client/admin.ts`). Set the domain before the first passkey player.
 - **What the game keeps:** `looks.json` (the shop's catalogue, the page's list and the admin's Shelf: the same file), `wrangler.jsonc` and the secrets (the shop
   reads `RECEIVE_ADDRESS`, `TEST_MODE`, `NODE_API_KEY`, `NANO_NODES`, `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET` itself), the frozen scheme, the account
@@ -178,10 +178,23 @@ It comes from the package too (`@nano133/nanoterra/admin-signin`, since 0.11.0):
   address: then nobody makes an admin login. The Worker answers `adminSigninOf(env, now).handle(request)` first, before the player's sign-in.
 - The admin handler reads the admin login with the sign-in's `session(request)` (the cookie `admin` only), and its store's "Sign out everywhere" and Sign-ins
   list are the sign-in's `signOutEverywhere()` and `recentLogins()` (`gameStore` in `src/worker/admin.ts`). The cron calls its `clean()`.
-- The store is the game's own tables (`signin_requests` and `sessions` with `scope = 'admin'`, `admin_logins`): no migration of its own.
+- The store is the game's own tables (`signin_requests` and `sessions` with `scope = 'admin'`, `admin_logins`), and for the owner's passkeys the two
+  tables of `migrations/0009_admin_passkeys.sql` (`admin_passkeys`, `admin_once`: the package's `admin-signin/d1.sql` ends with them since kit 0.12.0).
+- **The owner's passkeys are on** (`passkeys: true` in `adminSigninOf`, kit 0.12.0). A passkey is only a key to `/admin`: the money stays in the wallet.
+  `POST /passkey/link` and `/passkey/unlink` need a live WALLET admin login of `RECEIVE_ADDRESS` (a passkey's login gets 403 `wallet_only`), and a link
+  also needs the passkey's own signature of "Link this passkey to the ADMIN of <host>: ...". A linked passkey signs "ADMIN of <host>: sign in as ..." at
+  `POST /passkey` and gets an admin login with `via: "passkey"`; the session reads the link on EVERY request with the current owner, so Remove or a new
+  `RECEIVE_ADDRESS` ends it at the next request. A player's passkey signature (it names the host alone) never opens `/admin`. At most 10 passkeys. The
+  guard's only change is the package's: a `via: "passkey"` session opens `/admin` only with `linkedTo` equal to the owner. Do not loosen it.
+  `test/adminPasskeys.test.ts` pins all of this on the real Worker, and `test/adminConformance.test.ts` runs the conformance suite once more with the
+  owner's login made by a linked passkey.
 - **NanChat stays off** (the package's default, `nanchat: false`): its text cannot name the admin. Do not turn it on.
-- The page (`src/client/admin.ts`) gives `mountAdmin` the package's `adminSignIn({ personCheck })` and `adminSignOut()` (`/admin-signin/panel`) and imports its
-  stylesheet (`/admin-signin/style.css`, the player sheet's).
+- The page (`src/client/admin.ts`) gives `mountAdmin` the package's `adminSignIn({ personCheck, passkeys, scheme, name })` and `adminSignOut()`
+  (`/admin-signin/panel`), the card `cards: [ownerPasskeys({ scheme, name })]` (Settings, "Owner passkeys"), and imports its stylesheet
+  (`/admin-signin/style.css`, the player sheet's). `scheme` and `name` are the player sheet's own (`SCHEME`, `CONFIG.name`): never another scheme.
+  **No owner passkey on `*.workers.dev`**: the page checks `previewHost(location.hostname)` and then passes no `passkeys` and no card (the admin
+  sign-in's panel does not check the host itself). The passkey code and the purse load with `import()` from the game's own bundle only when a passkey
+  is used, so the Content Security Policy (`script-src 'self'`) needs no change.
 
 ## Never change (without the creator's clear yes, and new tests)
 
@@ -200,10 +213,10 @@ the risk first, then change it only with tests in `test/` that show the new rule
    `TEST_MODE` on, a pay screen shows **TEST MODE: DO NOT PAY**, no QR code, no address and no wallet
    link. A payment to an address nobody holds the key for is lost for good.
 5. **The admin guard** (the package's `adminAccess`, used by the handler that `src/worker/admin.ts` makes; every `/api/admin/*` route is behind it, the "Game" card's too): only the
-   creator's own `RECEIVE_ADDRESS`, signed in with Nano within the last day, can read or change anything under `/api/admin`. **Do not copy the guard back into this repository and do not
+   creator's own `RECEIVE_ADDRESS`, signed in with Nano (or with a passkey that this wallet linked) within the last day, can read or change anything under `/api/admin`. **Do not copy the guard back into this repository and do not
    loosen it.** The part that is this game's own (the owner and the admin session) is in `src/worker/admin.ts`; `test/adminConformance.test.ts` runs the package's conformance suite
    against it, so a wrong cookie, a missing owner or a route outside the guard fails a test. **The admin login is its own cookie** (`admin`, made only by a wallet
-   signature that `/admin` started on `/api/admin-signin`; the game's is `session`): the guard reads only the admin cookie, so a login made for
+   signature that `/admin` started on `/api/admin-signin`, or by a passkey the owner's wallet linked; the game's is `session`): the guard reads only the admin cookie, so a login made for
    the game (a wallet, or Nanoterra) can never open `/admin`, and an admin login is not a player. Keep it that way.
 6. **Sign-in** (the player's: the package's `@nano133/nanoterra/player-signin`; the admin's: the package's `@nano133/nanoterra/admin-signin`; both check signatures with
    `@nano133/signin`): players sign in with a passkey, Berry Wallet, NanChat or Nautilus. The signed text names the game's domain; only the browser that
@@ -233,7 +246,7 @@ the risk first, then change it only with tests in `test/` that show the new rule
    once (`hits`, by its id), also against "Not me" (this stops a link that holds someone else's code from signing a victim in as that
    person). The cookie reader compares a name exactly (`trimAscii` in `http.ts`): never go back to `trim()`, which lets a sibling subdomain
    toss a cookie that passes for a `__Host-` one. The name on the screen is escaped. The session it makes
-   (`via: "nanoterra"`) NEVER opens `/admin` (only a wallet signature does). A page never holds the secret, and the code is never
+   (`via: "nanoterra"`) NEVER opens `/admin` (only a wallet signature does, or a passkey that the wallet linked). A page never holds the secret, and the code is never
    logged. Whatever the game gives a player (a look, a score, a prize) must not depend on a Nanoterra sign-in alone if it would
    be wrong to give it to whoever holds that name: show the signed-in name first, and make clear whose account it is before a payment.
 

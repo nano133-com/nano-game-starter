@@ -8,7 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { adminHandler, gameStore } from "../src/worker/admin";
 import { EXAMPLE_ADDRESS, type Env } from "../src/worker/env";
 import worker from "../src/worker/index";
-import { Browser, ORIGIN, SIGNIN, signedInWith, walletAnswer, walletFrom } from "./api";
+import { Browser, linkPasskey, ORIGIN, passkeyBody, SIGNIN, signedInWith, testPasskey, walletAnswer, walletFrom } from "./api";
 import { createSession, makeDb, testAccount } from "./helpers";
 
 let db: D1Database;
@@ -28,14 +28,42 @@ const DAY = 24 * 60 * 60_000;
 let calls = 0;
 
 /**
+ * The owner's passkey (kit 0.12.0) for the run where the owner's login is made by a LINKED passkey: linked once through the real route (the owner's wallet
+ * admin login and the passkey's link signature), and linked again if a test emptied the table.
+ */
+const ownerPasskey = testPasskey();
+/** How many owner logins the passkey run made by the passkey route: the run must not pass with none. */
+let passkeyLogins = 0;
+async function linkedPasskey(): Promise<void> {
+  if (await db.prepare("SELECT 1 FROM admin_passkeys WHERE owner = ? AND address = ?").bind(owner.address, ownerPasskey.address).first()) return;
+  walletFrom.ip = `198.51.100.${(walletFrom.n = ((walletFrom.n ?? 0) + 1) % 250) + 1}`;
+  const admin = await signedInWith(live(), "berry", owner, "admin", new Browser(ORIGIN, { "CF-Connecting-IP": `203.0.113.${(calls++ % 250) + 1}` }));
+  const r = await linkPasskey(live(), admin, ownerPasskey.seed);
+  expect(r.status, JSON.stringify(r.body)).toBe(200);
+}
+
+/**
  * The game's own sessions, one for each kind of visitor the suite names. `base` is the game's origin: over https the cookies are `__Host-session` and `__Host-admin`, and the
  * suite runs on both (the `__Host-` branch of the cookie code is the one that runs in production). `again`: the same login as the last one of this kind.
+ * `ownerBy` "passkey": the owner's login ("owner") is made by the owner's linked passkey on the real route (POST /api/admin-signin/passkey), not by a wallet.
  */
-function sessions(base: string) {
+function sessions(base: string, ownerBy: "wallet" | "passkey" = "wallet") {
   const prefix = base.startsWith("https:") ? "__Host-" : "";
   const last = new Map<Who, string>();
   const cookie = (name: "session" | "admin", token: string) => `${prefix}${name}=${token}`;
   async function make(who: Who): Promise<string | null> {
+    if (who === "owner" && ownerBy === "passkey") {
+      await linkedPasskey();
+      const res = await worker.fetch(
+        new Request(`${base}/api/admin-signin/passkey`, { method: "POST", headers: { "Content-Type": "application/json", Origin: base, "CF-Connecting-IP": `198.51.100.${(calls++ % 250) + 1}` }, body: JSON.stringify(passkeyBody.admin(ownerPasskey.seed)) }),
+        live(),
+      );
+      const out = await res.json<Record<string, unknown>>();
+      expect(out, JSON.stringify(out)).toMatchObject({ status: "signedin", address: ownerPasskey.address, linkedTo: owner.address });
+      const set = res.headers.getSetCookie().find((c) => c.startsWith(`${prefix}admin=`))!;
+      passkeyLogins++;
+      return set.split(";")[0]!;
+    }
     const now = Date.now();
     switch (who) {
       case "signed_out":
@@ -95,9 +123,9 @@ function sessions(base: string) {
   return { get, end };
 }
 
-const host = (base: string = ORIGIN): ConformanceHost => {
+const host = (base: string = ORIGIN, ownerBy: "wallet" | "passkey" = "wallet"): ConformanceHost => {
   const routes = adminHandler(live(), Date.now(), "203.0.113.1");
-  const sess = sessions(base);
+  const sess = sessions(base, ownerBy);
   const cookieFor = sess.get;
   return {
     routes: routes.routes,
@@ -194,6 +222,11 @@ describe("the kit's sign-in chain contract, run against this game's own sign-in 
 
 describe("the same suite over https, where the cookies are __Host-session and __Host-admin", () => {
   for (const c of adminConformance(host("https://game.test"))) it(`[https] ${c.name}`, c.run, c.timeoutMs);
+});
+
+describe("the same suite with the owner's login made by the owner's LINKED passkey (kit 0.12.0: a passkey session opens /admin only while it is linked to the owner)", () => {
+  for (const c of adminConformance(host(ORIGIN, "passkey"))) it(`[passkey] ${c.name}`, c.run, c.timeoutMs);
+  it("[passkey] the owner's logins of this run were made by the passkey", () => expect(passkeyLogins).toBeGreaterThan(10));
 });
 
 describe("the package's store contract, run against this game's D1 store and its real tables", () => {

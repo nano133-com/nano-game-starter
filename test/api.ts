@@ -1,6 +1,9 @@
 // A small fake browser for the API tests: it keeps cookies and sends the Origin of the game's own page.
 
+import { randomBytes } from "node:crypto";
 import { nanoSigninMessage } from "@nano133/signin";
+import { purseAddress, signinBody } from "@nano133/signin/purse";
+import { adminLinkDomain, adminPasskeyDomain } from "@nano133/nanoterra/admin-signin";
 import { handleApi } from "../src/worker/index";
 import type { Env } from "../src/worker/env";
 import type { Way } from "@nano133/nanoterra/player-signin";
@@ -81,5 +84,37 @@ export async function signedInWith(env: Env, way: Way, account: Account, scope: 
   await walletAnswer(env, way, start.body, account);
   const check = await browser.call(env, `${SIGNIN[scope]}/check`, { body: { id: start.body.id, way } });
   if (check.body?.status !== "signedin") throw new Error(`check: ${JSON.stringify(check.body)}`);
+  return browser;
+}
+
+// ---- the owner's passkeys (kit 0.12.0): a passkey purse is a seed; the browser posts its signature of a text (the package's `signinBody`) ----
+
+/** The host every passkey text names: the game's own (the host of ORIGIN). */
+export const HOST = new URL(ORIGIN).host;
+
+/** A passkey purse of this test run only: the seed a passkey would give, and its address. Never a real wallet. */
+export function testPasskey(): { seed: string; address: string } {
+  const seed = randomBytes(32).toString("hex").toUpperCase();
+  return { seed, address: purseAddress(seed) };
+}
+
+let lastAt = 0;
+/** A signing time that no other signature of this run used: each passkey signature counts once, and the signed text holds the time. */
+export const freshAt = (now = Date.now()) => (lastAt = Math.max(now, lastAt + 1));
+
+/** What the page posts for each passkey text: the ADMIN sign-in, the LINK, and the PLAYER's sign-in (the host alone). */
+export const passkeyBody = {
+  admin: (seed: string, at = freshAt()) => signinBody(adminPasskeyDomain(HOST), seed, at),
+  link: (seed: string, at = freshAt()) => signinBody(adminLinkDomain(HOST), seed, at),
+  player: (seed: string, at = freshAt()) => signinBody(HOST, seed, at),
+};
+
+/** Links the passkey of `seed` to the owner with `admin`'s login (it must be the owner's WALLET admin login): the answer of POST /passkey/link. */
+export const linkPasskey = (env: Env, admin: Browser, seed: string) => admin.call(env, "/api/admin-signin/passkey/link", { body: passkeyBody.link(seed) });
+
+/** A browser that signs in to /admin with the passkey of `seed` (it must be linked), on the real route POST /api/admin-signin/passkey. */
+export async function signedInWithPasskey(env: Env, seed: string, browser = new Browser()) {
+  const r = await browser.call(env, "/api/admin-signin/passkey", { body: passkeyBody.admin(seed) });
+  if (r.body?.status !== "signedin") throw new Error(`passkey sign-in: ${r.status} ${JSON.stringify(r.body)}`);
   return browser;
 }

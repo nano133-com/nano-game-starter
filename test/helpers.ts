@@ -12,7 +12,7 @@ import * as nanoNs from "nanocurrency-web";
 import { SESSION_DAYS } from "@nano133/nanoterra/player-signin";
 import { ADMIN_SESSION_MS, adminKey } from "@nano133/nanoterra/admin-signin";
 
-const MIGRATIONS = ["migrations/0001_init.sql", "migrations/0002_wallet_apps.sql", "migrations/0003_nanoterra.sql", "migrations/0004_nanoterra_record.sql", "migrations/0005_admin_logins.sql", "migrations/0006_signin_scope.sql", "migrations/0007_friends.sql", "migrations/0008_player_signin.sql"];
+const MIGRATIONS = ["migrations/0001_init.sql", "migrations/0002_wallet_apps.sql", "migrations/0003_nanoterra.sql", "migrations/0004_nanoterra_record.sql", "migrations/0005_admin_logins.sql", "migrations/0006_signin_scope.sql", "migrations/0007_friends.sql", "migrations/0008_player_signin.sql", "migrations/0009_admin_passkeys.sql"];
 
 /** A fresh, empty D1 database with the game's tables. */
 export async function makeDb(): Promise<{ db: D1Database; close: () => Promise<void> }> {

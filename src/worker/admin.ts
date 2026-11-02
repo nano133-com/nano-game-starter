@@ -1,6 +1,6 @@
 // The creator's admin (/admin): the package's handler (@nano133/nanoterra/admin) and the package's admin sign-in (@nano133/nanoterra/admin-signin, on its one
 // fixed route /api/admin-signin), on THIS game's own D1 tables and status. Only the creator's own address (RECEIVE_ADDRESS), signed in with a wallet
-// less than ADMIN_SESSION_MS ago, can read or change anything here.
+// (or with a passkey that this wallet linked) less than ADMIN_SESSION_MS ago, can read or change anything here.
 //
 // The guard is the package's `adminAccess`, and the sign-in that makes admin logins is the package's too: DO NOT copy either back into this file and DO NOT
 // loosen them. What this file must get right is the part that is the game's own: the owner (receiveAddress), the session (the admin sign-in's: the admin
@@ -26,6 +26,11 @@ export { ADMIN_SESSION_MS };
  * and an admin who was signed in before it stays signed in. Only RECEIVE_ADDRESS makes an admin login (null while none is set: then nobody does).
  * NanChat stays off (the package's default): its text cannot name the admin. The starts count with the player's in D1 (`signin|<visitor>`: 20 in 10
  * minutes), after the person check (Turnstile, when the game has its keys).
+ *
+ * The owner's passkeys are on (`passkeys: true`, kit 0.12.0; the tables of migrations/0009_admin_passkeys.sql): `/passkey/link` and `/passkey/unlink`
+ * need a live WALLET admin login of RECEIVE_ADDRESS, and a linked passkey's own signature of "ADMIN of <host>: sign in as ..." makes an admin login
+ * (`via: "passkey"`) at `/passkey`. `session()` reads the link on every request with the CURRENT owner: a removed link or a new RECEIVE_ADDRESS ends
+ * that login at the next request. A player's passkey signature (it names the host alone) never opens /admin. A passkey cannot move money.
  */
 export function adminSigninOf(env: Env, now = Date.now()): AdminSignin {
   return createAdminSignin({
@@ -34,6 +39,7 @@ export function adminSigninOf(env: Env, now = Date.now()): AdminSignin {
     limit: (key, limit, windowMs, at) => d1Limit(env.DB, key, limit, windowMs, at),
     visitor: (req) => visitorKey(env.DB, req),
     personCheck: (token, req) => turnstileCheck(env, token, req.headers.get("CF-Connecting-IP")),
+    passkeys: true,
     now: () => now,
     onError: (e) => console.error("admin sign-in failed", e instanceof Error ? e.message : String(e)),
   });
@@ -79,7 +85,8 @@ export function adminHandler(env: Env, now: number, ip: string): AdminHandler {
     store: gameStore(env),
     defaults: gameDefaults,
     owner: receiveAddress(env),
-    // Only the ADMIN login (its own cookie, made by a wallet signature started from /admin): a login made for the game, even the owner's own, is not one.
+    // Only the ADMIN login (its own cookie, made by a wallet signature started from /admin, or by a passkey the owner's wallet linked): a login made for
+    // the game, even the owner's own, is not one.
     session: (req, at) => adminSigninOf(env, now).session(req, at),
     status: async (_at, s) => adminStatus(env, s, (await settingsOf(env)).friends),
     lookName: (id) => lookById(id)?.name,

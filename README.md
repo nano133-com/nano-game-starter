@@ -109,7 +109,7 @@ model takes a Critter's tail and a Bee's wings off under it.
 
 ## Signing in to /admin
 
-Only a wallet signature opens `/admin`, and **what the wallet signs says so**, so that a link sent to you by a stranger does not look like any sign-in:
+Your wallet opens `/admin` (and, after that, any passkey you link to it: see "Owner passkeys" below), and **what the wallet signs says so**, so that a link sent to you by a stranger does not look like any sign-in:
 Berry Wallet signs the page it signs in to (`URI: https://your-game/admin`: the path names the admin, and there is no query because Berry refuses one) and Nautilus signs a label
 (`ADMIN of your-game sign-in ABCD-EFGH from US`, with a line that says when it started and "If you did not start this, do not sign"). **If you are asked to sign in to the admin and you did
 not start it yourself, do not sign.** An admin sign-in request lives 2 minutes and works once. NanChat is not offered for the admin (it cannot name the admin in what it signs).
@@ -126,6 +126,16 @@ sign-in is written, and by the clean-up that runs every 10 minutes). The table i
 (`'admin'` for an admin login) so that "Sign out everywhere" ends the admin logins and no player's. It also ends the admin requests that were started and not collected (a request that
 the owner signed a moment ago, or signs a moment later, makes no login), and the sign-in that collects a request writes the delivery and the session in ONE database batch, so a "Sign out
 everywhere" can never run between them.
+
+**Owner passkeys.** After a wallet sign-in, open **Settings** in `/admin` and use the **Owner passkeys** card: **Add a passkey** links a passkey (Face ID,
+Touch ID or the device PIN) to your address, at most 10. From then on the sign-in of `/admin` has a **Passkey** tile, and that passkey opens `/admin`
+without the wallet. **A passkey is only a key to `/admin`: your money stays in your wallet.** Only a wallet sign-in can add or remove a passkey; a
+passkey's sign-in sees the list and cannot change it. **Remove** ends that passkey's access at its next request, and so does a new `RECEIVE_ADDRESS`
+(a link belongs to the address that made it). A passkey you also use to play may be linked too: its player sign-in still opens nothing here.
+The passkeys come from the game's passkey scheme (`src/shared/scheme.ts`, the players' one) and belong to one domain for good, so **on your
+`*.workers.dev` address there is no Passkey tile and no Owner passkeys card**: they turn on with your game's own domain. The links are kept in two
+tables of `migrations/0009_admin_passkeys.sql` (`admin_passkeys`: the owner, the passkey's address and when; `admin_once`: each passkey signature,
+so that it counts once). `npm run deploy` applies it; on an older copy of the game run `npx wrangler d1 migrations apply DB --remote` once.
 
 ## Sign in from Nanoterra
 
@@ -159,7 +169,7 @@ To switch it on:
    reads your start route (it must set a cookie and redirect to nano133.com's authorize address with your client id and a state).
 
 What a player signed in from Nanoterra gets here: a session for the address Nanoterra named. It can show the player's name,
-own looks and order looks like any signed-in player. It **never opens `/admin`**: only a wallet signature does.
+own looks and order looks like any signed-in player. It **never opens `/admin`**: only a wallet signature does (or a passkey that the wallet linked).
 
 **Two switches in `/admin` (the "Game" card).** Open `/admin` and look at **Game**. It has two switches (and the friends list's choice, see "The friends list", and "Allow Nanoterra emotes", see "Options and emotes"): **Players use their Nanoterra
 character** and **Players can sign in with Nanoterra**. A press saves at once: you push nothing and deploy nothing. They start from the words in
@@ -256,8 +266,8 @@ Nanoterra games use, kept up to date there. Your game does not hold a copy. `src
 **The passkey.** A player can sign in with a passkey (Face ID, Touch ID or the device PIN): no app to install. The passkey makes the player's Nano
 address in the browser, and the looks they buy belong to that address. Two rules keep those looks safe:
 
-- **A passkey belongs to one domain for good.** On your `*.workers.dev` address the sign-in offers the wallet apps only, and `/admin` says
-  "Passkeys turn on when your game has its own domain." Give your game its own domain before your first player; the passkey turns on there.
+- **A passkey belongs to one domain for good.** On your `*.workers.dev` address the sign-in offers the wallet apps only, `/admin` offers no owner
+  passkey, and `/admin` says "Passkeys turn on when your game has its own domain." Give your game its own domain before your first player; the passkey turns on there.
 - **Set your domain in `src/shared/scheme.ts` once, before your first player, and never change it after.** Its three texts say `your-game.example`
   now: replace that with your domain (for example `mygame.com`), run `npm test`, and write the two new values that `test/scheme.test.ts` prints into
   that test. After your first player, a change of one character gives every passkey player another address, and they lose their looks. Your AI
