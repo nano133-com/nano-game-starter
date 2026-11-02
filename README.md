@@ -83,7 +83,8 @@ nothing to GitHub. When you like the draft, press **Copy looks.json** and put th
 **Copy for my AI** and give it to your AI assistant. Push to GitHub: your game builds again and the new looks go live. If you set
 `GITHUB_REPO` (for example `your-name/your-game`) in `wrangler.jsonc`, the Shelf also links to `looks.json` on GitHub. The Shelf is part of
 the admin panel, which comes from the package [`@nano133/nanoterra`](https://www.npmjs.com/package/@nano133/nanoterra) (path `/admin/panel`): the same `/admin` that any Three.js game can mount.
-This game only gives the panel what is its own: the owner address, the admin login, the looks and the wallet sign-in (`src/client/admin.ts`, `src/worker/admin.ts`).
+The admin's wallet sign-in comes from the same package (path `/admin-signin`). This game only gives the two what is its own: the owner address, the looks, the
+limits and the person check (`src/client/admin.ts`, `src/worker/admin.ts`).
 
 ## A look with its own 3D model
 
@@ -112,6 +113,11 @@ Only a wallet signature opens `/admin`, and **what the wallet signs says so**, s
 Berry Wallet signs the page it signs in to (`URI: https://your-game/admin`: the path names the admin, and there is no query because Berry refuses one) and Nautilus signs a label
 (`ADMIN of your-game sign-in ABCD-EFGH from US`, with a line that says when it started and "If you did not start this, do not sign"). **If you are asked to sign in to the admin and you did
 not start it yourself, do not sign.** An admin sign-in request lives 2 minutes and works once. NanChat is not offered for the admin (it cannot name the admin in what it signs).
+
+The admin's sign-in is the package's ([`@nano133/nanoterra/admin-signin`](https://www.npmjs.com/package/@nano133/nanoterra)), on its own route `/api/admin-signin` (`/start`,
+`/nano/:id` for Berry Wallet, `/nautilus?id=` for Nautilus, `/check`, `/signout`), with its own cookie `admin` (one day). The players sign in on `/api/signin` with the cookie
+`session`, so a player's login never opens `/admin`, and the creator can be signed in to the game and to `/admin` as two different people at once. It uses the game's own tables
+(`signin_requests` and `sessions`, the rows with `scope = 'admin'`, and `admin_logins`): no table of its own.
 
 The **Sign-ins** card of `/admin` lists the last 10 admin sign-ins (the time, the rough country and a short browser name such as "Chrome on macOS"), and **Sign out everywhere** ends every
 admin login in every browser, this one too (two presses). **What is kept, and for how long:** for each admin sign-in the game keeps the time, the country that Cloudflare's country header
@@ -300,9 +306,9 @@ The tests use a fake Nano node and keys made in the test: no network and no mone
 | `src/shared/scheme.ts` | Your domain in the passkey scheme: ONCE, before your first player (see "The shop and the sign-in") |
 | `public/art/` | The listing pictures (`wide.jpg` 1600×900, `tall.jpg` 900×1600) |
 
-Do not change the payment check, the reservation, the admin guard or the sign-in. The shop and the player's sign-in come from the package
+Do not change the payment check, the reservation, the admin guard or the sign-in. The shop, the player's sign-in and the admin's sign-in come from the package
 `@nano133/nanoterra`: do not copy their code into your game. `AGENTS.md` says why.
 
-MIT license. Copyright Pugs, LLC. Made by [nano133.com](https://nano133.com). The shop and the player's sign-in are
+MIT license. Copyright Pugs, LLC. Made by [nano133.com](https://nano133.com). The shop and the two sign-ins (the player's and the admin's) are
 [`@nano133/nanoterra`](https://www.npmjs.com/package/@nano133/nanoterra); Sign in with Nano is
 [`@nano133/signin`](https://www.npmjs.com/package/@nano133/signin).

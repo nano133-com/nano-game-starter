@@ -50,7 +50,13 @@ export async function walletCall(env: Env, path: string, body?: unknown, now = D
 
 type Account = { address: string; privateKey: string };
 
-/** Plays wallet app `way` for a request the browser started (`start`): reads it, signs it as `account`, posts the answer. */
+/** The two sign-ins' routes: the player's (the package's player sign-in) and the ADMIN's (the package's admin sign-in, on its own fixed route). */
+export const SIGNIN = { play: "/api/signin", admin: "/api/admin-signin" } as const;
+
+/** Berry Wallet's route for a request: the path of the `request_uri` in the start's link (the player's or the admin's sign-in). */
+export const berryPath = (start: Record<string, any>): string => new URL(new URL(start.link).searchParams.get("request_uri")!).pathname;
+
+/** Plays wallet app `way` for a request the browser started (`start`, from either sign-in): reads it, signs it as `account`, posts the answer. */
 export async function walletAnswer(env: Env, way: Way, start: Record<string, any>, account: Account, now = Date.now()) {
   if (way === "nautilus") {
     const item = nanoauthItem(start.link);
@@ -60,16 +66,20 @@ export async function walletAnswer(env: Env, way: Way, start: Record<string, any
     const { message, url } = nanauthOf(start.link);
     return walletCall(env, url.slice(ORIGIN.length), nanchatAnswer(message, account), now);
   }
-  const request = (await walletCall(env, `/api/signin/nano/${start.id}`, undefined, now)).body;
-  return walletCall(env, `/api/signin/nano/${start.id}`, berryAnswer(request, account, nanoSigninMessage(request, account.address)), now);
+  const path = berryPath(start);
+  const request = (await walletCall(env, path, undefined, now)).body;
+  return walletCall(env, path, berryAnswer(request, account, nanoSigninMessage(request, account.address)), now);
 }
 
-/** A new browser, signed in as `account` by wallet app `way`, through the game's own routes. `scope` "admin" makes the /admin login (its own cookie). */
+/**
+ * A new browser, signed in as `account` by wallet app `way`, through the game's own routes. `scope` "admin" makes the /admin login (its own cookie) on the
+ * admin's sign-in, /api/admin-signin; "play" the player's, on /api/signin.
+ */
 export async function signedInWith(env: Env, way: Way, account: Account, scope: "play" | "admin" = "play", browser = new Browser()) {
-  const start = await browser.call(env, "/api/signin/start", { body: { way, scope } });
+  const start = await browser.call(env, `${SIGNIN[scope]}/start`, { body: { way } });
   if (start.status !== 200) throw new Error(`start: ${start.status} ${JSON.stringify(start.body)}`);
   await walletAnswer(env, way, start.body, account);
-  const check = await browser.call(env, "/api/signin/check", { body: { id: start.body.id, way, scope } });
+  const check = await browser.call(env, `${SIGNIN[scope]}/check`, { body: { id: start.body.id, way } });
   if (check.body?.status !== "signedin") throw new Error(`check: ${JSON.stringify(check.body)}`);
   return browser;
 }

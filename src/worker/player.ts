@@ -1,8 +1,8 @@
 // The PLAYER's sign-in and the shop. Both are the package's (@nano133/nanoterra, paths /player-signin and /shop), on this game's own D1 tables
 // and settings; this file only gives them what is this game's: the database, the creator's address, the limits, the person check and the looks.
 //
-// The player's sign-in shares its paths with the ADMIN's sign-in (src/worker/signin.ts): `sharedPaths` leaves every call of the admin (`scope:
-// "admin"` in the body, or a wallet's call for a request that the player store does not hold) to the admin's code. A player is a Nano address,
+// The ADMIN's sign-in is another one, on its own route (/api/admin-signin, the package's: see admin.ts): the player's sign-in answers every call of its
+// own paths, and never makes an admin login (the store reads only the player's rows, scope 'play'). A player is a Nano address,
 // whichever way they signed in (a passkey, a wallet app, or Nanoterra): the shop, /api/me and the friends list read it with `signin.player()` or
 // `signin.session()`, never from a body and never from the admin cookie.
 
@@ -19,7 +19,6 @@ export function playerSignin(env: Env, now = Date.now()): PlayerSignin {
     store: createD1PlayerSignin(env.DB),
     // Nautilus only NAMES this address in its request: no key, no payment. The example address while none is set.
     siteAddress: receiveAddress(env),
-    sharedPaths: true,
     // One count for the whole game, in D1 (`hits`), on a keyed hash of the IP address: the rows the game counted in before.
     limit: (key, limit, windowMs, at) => d1Limit(env.DB, key, limit, windowMs, at),
     visitor: (req) => visitorKey(env.DB, req),

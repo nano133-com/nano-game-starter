@@ -4,9 +4,10 @@
 
 import { nanoSigninMessage } from "@nano133/signin";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { ADMIN_LOGIN_KEEP_MS, ADMIN_REQUEST_MS, countryOf, shortBrowser } from "@nano133/nanoterra/admin-signin";
+import { createD1AdminSignin } from "@nano133/nanoterra/admin-signin/d1";
 import type { Env } from "../src/worker/env";
-import { ADMIN_LOGIN_KEEP_MS, ADMIN_REQUEST_MS, recordAdminLogin } from "../src/worker/signin";
-import { Browser, ORIGIN, signedInWith, walletAnswer, walletCall, walletFrom } from "./api";
+import { berryPath, Browser, ORIGIN, SIGNIN, signedInWith, walletAnswer, walletCall, walletFrom } from "./api";
 import { berryAnswer, createSession, makeDb, nanoauthItem, nautilusAnswer, testAccount } from "./helpers";
 
 let env: Env;
@@ -28,15 +29,17 @@ beforeEach(async () => {
 const CHROME_MAC = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 const EDGE_WIN = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0";
 const us = () => new Browser(ORIGIN, { "CF-IPCountry": "US", "User-Agent": CHROME_MAC });
-const start = (b: Browser, way: "berry" | "nautilus" | "nanchat", scope: "play" | "admin", now?: number) => b.call(env, "/api/signin/start", { body: { way, scope }, now });
+/** Starts a request on the player's sign-in (/api/signin) or on the admin's (/api/admin-signin). */
+const start = (b: Browser, way: "berry" | "nautilus" | "nanchat", scope: "play" | "admin", now?: number) => b.call(env, `${SIGNIN[scope]}/start`, { body: { way }, now });
 const sessionCount = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM sessions").first<{ n: number }>())!.n;
-const berryRequest = async (id: string) => (await walletCall(env, `/api/signin/nano/${id}`)).body as Record<string, string>;
+/** What Berry Wallet reads for a request that a start made (on its own sign-in's route). */
+const berryRequest = async (s: Record<string, any>) => (await walletCall(env, berryPath(s))).body as Record<string, string>;
 
 describe("what the wallet signs for the admin", () => {
   it("Berry Wallet: the URI line of the signed text names the admin with no query (Berry refused \"/admin?from=US\"), and the text carries the start time; the game's names no admin", async () => {
     const a = await start(us(), "berry", "admin");
     expect(a.status).toBe(200);
-    const req = await berryRequest(a.body.id);
+    const req = await berryRequest(a.body);
     expect(req.uri).toBe(`${ORIGIN}/admin`);
     expect(new URL(req.uri).search).toBe("");
     const text = nanoSigninMessage(req as never, owner.address);
@@ -46,7 +49,7 @@ describe("what the wallet signs for the admin", () => {
     expect(new Date(req.issuedAt).toISOString()).toBe(req.issuedAt);
 
     const g = await start(new Browser(), "berry", "play");
-    const gameReq = await berryRequest(g.body.id);
+    const gameReq = await berryRequest(g.body);
     expect(gameReq.uri).toBe(`${ORIGIN}/`);
     expect(nanoSigninMessage(gameReq as never, owner.address)).not.toContain("admin");
   });
@@ -55,7 +58,7 @@ describe("what the wallet signs for the admin", () => {
     for (const value of [undefined, "US", "XX", "T1", "usa"]) {
       const b = new Browser(ORIGIN, value === undefined ? {} : { "CF-IPCountry": value });
       const a = await start(b, "berry", "admin");
-      expect((await berryRequest(a.body.id)).uri, String(value)).toBe(`${ORIGIN}/admin`);
+      expect((await berryRequest(a.body)).uri, String(value)).toBe(`${ORIGIN}/admin`);
     }
   });
 
@@ -90,17 +93,18 @@ describe("a game sign-in can never open /admin, and an admin sign-in can never m
       await walletAnswer(env, way, s.body, owner); // the OWNER signs the game's text
       const before = await sessionCount();
       // A stranger's browser, and the game's own browser asking as the admin (its game cookie copied to the admin's name): neither gets an admin login.
+      // The admin's sign-in (the package's) holds no game request: to it the request does not exist ("expired").
       const stranger = new Browser();
-      expect((await stranger.call(env, "/api/signin/check", { body: { id: s.body.id, way, scope: "admin" } })).body).toEqual({ status: "elsewhere" });
+      expect((await stranger.call(env, "/api/admin-signin/check", { body: { id: s.body.id, way } })).body).toEqual({ status: "expired" });
       expect(stranger.jar.has("admin")).toBe(false);
       game.jar.set("starter-admin", game.jar.get("starter")!);
-      const asAdmin = await game.call(env, "/api/signin/check", { body: { id: s.body.id, way, scope: "admin" } });
-      expect(asAdmin.body).toEqual({ status: "elsewhere" });
+      const asAdmin = await game.call(env, "/api/admin-signin/check", { body: { id: s.body.id, way } });
+      expect(asAdmin.body).toEqual({ status: "expired" });
       expect(game.jar.has("admin")).toBe(false);
       expect(await sessionCount()).toBe(before);
       expect((await game.call(env, "/api/admin/summary")).status).toBe(401);
       // The control: asked as the game, it is a game session, and still no admin.
-      const asGame = await game.call(env, "/api/signin/check", { body: { id: s.body.id, way, scope: "play" } });
+      const asGame = await game.call(env, "/api/signin/check", { body: { id: s.body.id, way } });
       expect(asGame.body).toEqual({ status: "signedin", address: owner.address });
       expect(game.jar.has("session")).toBe(true);
       expect((await game.call(env, "/api/admin/summary")).status).toBe(401);
@@ -113,15 +117,15 @@ describe("a game sign-in can never open /admin, and an admin sign-in can never m
       const before = await sessionCount();
       const stranger = new Browser();
       // The player's sign-in (the package's) holds no admin request: to it the request does not exist ("expired").
-      expect((await stranger.call(env, "/api/signin/check", { body: { id: s.body.id, way, scope: "play" } })).body).toEqual({ status: "expired" });
+      expect((await stranger.call(env, "/api/signin/check", { body: { id: s.body.id, way } })).body).toEqual({ status: "expired" });
       admin.jar.set("starter", admin.jar.get("starter-admin")!);
-      const asGame = await admin.call(env, "/api/signin/check", { body: { id: s.body.id, way, scope: "play" } });
+      const asGame = await admin.call(env, "/api/signin/check", { body: { id: s.body.id, way } });
       expect(asGame.body).toEqual({ status: "expired" });
       expect(admin.jar.has("session")).toBe(false);
       expect(await sessionCount()).toBe(before);
       expect((await admin.call(env, "/api/me")).body).toMatchObject({ address: null });
       // The control: asked as the admin, it is an admin login and no game session.
-      const asAdmin = await admin.call(env, "/api/signin/check", { body: { id: s.body.id, way, scope: "admin" } });
+      const asAdmin = await admin.call(env, "/api/admin-signin/check", { body: { id: s.body.id, way } });
       expect(asAdmin.body).toEqual({ status: "signedin", address: owner.address });
       expect(admin.jar.has("admin")).toBe(true);
       expect(admin.jar.has("session")).toBe(false);
@@ -132,9 +136,10 @@ describe("a game sign-in can never open /admin, and an admin sign-in can never m
   it("Berry Wallet: the game's signed text sent for an admin request is refused, and so is the admin's sent for a game request; each is accepted only as its own", async () => {
     const a = await start(us(), "berry", "admin");
     const g = await start(new Browser(), "berry", "play");
-    const adminReq = await berryRequest(a.body.id);
-    const gameReq = await berryRequest(g.body.id);
-    const post = (id: string, body: unknown) => walletCall(env, `/api/signin/nano/${id}`, body);
+    const adminReq = await berryRequest(a.body);
+    const gameReq = await berryRequest(g.body);
+    // Each request's own Berry route: the admin's on /api/admin-signin, the game's on /api/signin.
+    const post = (id: string, body: unknown) => walletCall(env, `${id === a.body.id ? SIGNIN.admin : SIGNIN.play}/nano/${id}`, body);
     // The game's text, signed, posted for the admin's request id (and the other way round).
     const gameText = nanoSigninMessage(gameReq as never, owner.address);
     const adminText = nanoSigninMessage(adminReq as never, owner.address);
@@ -147,7 +152,7 @@ describe("a game sign-in can never open /admin, and an admin sign-in can never m
     const plain = nanoSigninMessage({ ...adminReq, uri: `${ORIGIN}/` } as never, owner.address);
     expect((await post(a.body.id, berryAnswer(adminReq, owner, plain))).status).toBe(401);
     // Nothing was used up: each is still waiting, and each is accepted as its own.
-    expect((await walletCall(env, `/api/signin/nano/${a.body.id}`)).status).toBe(200);
+    expect((await walletCall(env, berryPath(a.body))).status).toBe(200);
     expect((await post(a.body.id, berryAnswer(adminReq, owner, adminText))).status).toBe(204);
     expect((await post(g.body.id, berryAnswer(gameReq, owner, gameText))).status).toBe(204);
   });
@@ -157,7 +162,8 @@ describe("a game sign-in can never open /admin, and an admin sign-in can never m
     const g = await start(new Browser(), "nautilus", "play");
     const adminItem = nanoauthItem(a.body.link);
     const gameItem = nanoauthItem(g.body.link);
-    const post = (id: string, answer: unknown) => walletCall(env, `/api/signin/nautilus?id=${id}`, answer);
+    // Each request's own Nautilus route: the admin's on /api/admin-signin, the game's on /api/signin.
+    const post = (id: string, answer: unknown) => walletCall(env, `${id === a.body.id ? SIGNIN.admin : SIGNIN.play}/nautilus?id=${id}`, answer);
     const crossA = await post(a.body.id, nautilusAnswer(gameItem, owner));
     expect(crossA.body.status).toBe(1);
     expect(crossA.body.message).toBe("The signed text is not this sign-in's.");
@@ -189,19 +195,19 @@ describe("an admin request lives 2 minutes and works once", () => {
       const admin = us();
       const a = await start(admin, way, "admin", t0);
       await walletAnswer(env, way, a.body, owner, t0 + 100_000);
-      const late = await admin.call(env, "/api/signin/check", { body: { id: a.body.id, way, scope: "admin" }, now: t0 + 120_000 + 61_000 });
+      const late = await admin.call(env, "/api/admin-signin/check", { body: { id: a.body.id, way }, now: t0 + 120_000 + 61_000 });
       expect(late.body, way).toEqual({ status: "elsewhere" });
       expect(admin.jar.has("admin")).toBe(false);
       // The same timing in time: delivered.
       const admin2 = us();
       const b = await start(admin2, way, "admin", t0);
       await walletAnswer(env, way, b.body, owner, t0 + 100_000);
-      expect((await admin2.call(env, "/api/signin/check", { body: { id: b.body.id, way, scope: "admin" }, now: t0 + 120_000 + 30_000 })).body, way).toEqual({ status: "signedin", address: owner.address });
+      expect((await admin2.call(env, "/api/admin-signin/check", { body: { id: b.body.id, way }, now: t0 + 120_000 + 30_000 })).body, way).toEqual({ status: "signedin", address: owner.address });
       // The game's: 5 minutes and an hour of delivery, unchanged.
       const game = new Browser();
       const g = await start(game, way, "play", t0);
       await walletAnswer(env, way, g.body, owner, t0 + 100_000);
-      expect((await game.call(env, "/api/signin/check", { body: { id: g.body.id, way, scope: "play" }, now: t0 + 300_000 + 61_000 })).body, way).toEqual({ status: "signedin", address: owner.address });
+      expect((await game.call(env, "/api/signin/check", { body: { id: g.body.id, way }, now: t0 + 300_000 + 61_000 })).body, way).toEqual({ status: "signedin", address: owner.address });
     }
   });
 
@@ -210,14 +216,14 @@ describe("an admin request lives 2 minutes and works once", () => {
       const admin = us();
       const a = await start(admin, way, "admin");
       await walletAnswer(env, way, a.body, owner);
-      expect((await admin.call(env, "/api/signin/check", { body: { id: a.body.id, way, scope: "admin" } })).body).toEqual({ status: "signedin", address: owner.address });
+      expect((await admin.call(env, "/api/admin-signin/check", { body: { id: a.body.id, way } })).body).toEqual({ status: "signedin", address: owner.address });
       const before = await sessionCount();
-      expect((await admin.call(env, "/api/signin/check", { body: { id: a.body.id, way, scope: "admin" } })).body).toEqual({ status: "used" });
+      expect((await admin.call(env, "/api/admin-signin/check", { body: { id: a.body.id, way } })).body).toEqual({ status: "used" });
       expect(await sessionCount()).toBe(before);
       // Someone else who has the request's id and copies the cookie has no second login either.
       const copy = new Browser();
       copy.jar.set("starter-admin", admin.jar.get("starter-admin")!);
-      expect((await copy.call(env, "/api/signin/check", { body: { id: a.body.id, way, scope: "admin" } })).body).toEqual({ status: "used" });
+      expect((await copy.call(env, "/api/admin-signin/check", { body: { id: a.body.id, way } })).body).toEqual({ status: "used" });
       expect(await sessionCount()).toBe(before);
     }
   });
@@ -252,7 +258,8 @@ describe("the list of admin sign-ins keeps three things", () => {
     const now = Date.now();
     const req = new Request(`${ORIGIN}/`, { headers: { "CF-IPCountry": "DE", "User-Agent": CHROME_MAC } });
     await env.DB.prepare("INSERT INTO admin_logins (at, country, browser) VALUES (?, 'FR', 'Old'), (?, 'FR', 'Kept')").bind(now - ADMIN_LOGIN_KEEP_MS - 1000, now - ADMIN_LOGIN_KEEP_MS + 86_400_000).run();
-    await recordAdminLogin(env.DB, req, now);
+    // What the admin's sign-in writes for a login: the time, the country and the short browser name, through its D1 store.
+    await createD1AdminSignin(env.DB).recordLogin({ at: now, country: countryOf(req), browser: shortBrowser(req.headers.get("User-Agent")) });
     const left = (await rows()).map((r) => r.browser);
     expect(left).toEqual(["Kept", "Chrome on macOS"]);
   });
@@ -301,7 +308,7 @@ describe("Sign out everywhere", () => {
 });
 
 describe("what the third security read found", () => {
-  const checkAs = (b: Browser, id: string, way: "berry" | "nautilus", scope: "play" | "admin", now?: number) => b.call(env, "/api/signin/check", { body: { id, way, scope }, now });
+  const checkAs = (b: Browser, id: string, way: "berry" | "nautilus", scope: "play" | "admin", now?: number) => b.call(env, `${SIGNIN[scope]}/check`, { body: { id, way }, now });
 
   for (const way of ["berry", "nautilus"] as const) {
     it(`${way}: a signature for an ADMIN request never makes a game login, even with the starter cookie retyped with the admin prefix, even later (the game's one-hour delivery does not apply)`, async () => {
@@ -350,16 +357,16 @@ describe("what the third security read found", () => {
   it("Berry: the admin's text comes from the stored SCOPE, not from a note: with the note removed an admin request still gets the admin's text, and the game's text is refused for it", async () => {
     const a = await start(us(), "berry", "admin");
     await env.DB.prepare("UPDATE signin_requests SET label = NULL WHERE id = ?").bind(a.body.id).run();
-    const req = await berryRequest(a.body.id);
+    const req = await berryRequest(a.body);
     expect(req.uri).toBe(`${ORIGIN}/admin`);
     const gameText = nanoSigninMessage({ ...req, uri: `${ORIGIN}/` } as never, owner.address);
-    const crossed = await walletCall(env, `/api/signin/nano/${a.body.id}`, berryAnswer(req, owner, gameText));
+    const crossed = await walletCall(env, berryPath(a.body), berryAnswer(req, owner, gameText));
     expect(crossed.status).toBe(401);
     expect(crossed.body.message).toBe("The signed text is not this sign-in's.");
     // A game request whose note says admin is still the game's text: the scope decides.
     const g = await start(new Browser(), "berry", "play");
     await env.DB.prepare("UPDATE signin_requests SET label = 'admin:US' WHERE id = ?").bind(g.body.id).run();
-    expect((await berryRequest(g.body.id)).uri).toBe(`${ORIGIN}/`);
+    expect((await berryRequest(g.body)).uri).toBe(`${ORIGIN}/`);
   });
 
   it("Sign out everywhere also ends an admin request that the owner signed but the browser has not collected: its check makes no login; a game request is left alone", async () => {
@@ -427,7 +434,7 @@ describe("the delivery and the session are one batch (a fourth security read fou
         ran = true;
         expect((await other.call(env, "/api/admin/signout-all", { method: "POST", body: {} })).status).toBe(200);
       });
-      const got = await pending.call(w.env, "/api/signin/check", { body: { id: a.body.id, way, scope: "admin" } });
+      const got = await pending.call(w.env, "/api/admin-signin/check", { body: { id: a.body.id, way } });
       expect(ran, "the delivery and the session are not sent as one batch of two statements").toBe(true);
       expect(got.body.status).not.toBe("signedin");
       expect(pending.jar.has("admin")).toBe(false);
@@ -439,12 +446,12 @@ describe("the delivery and the session are one batch (a fourth security read fou
       const a = await start(browser, way, "admin");
       await walletAnswer(env, way, a.body, owner);
       const w = watched(async () => {});
-      const got = await browser.call(w.env, "/api/signin/check", { body: { id: a.body.id, way, scope: "admin" } });
+      const got = await browser.call(w.env, "/api/admin-signin/check", { body: { id: a.body.id, way } });
       expect(got.body).toEqual({ status: "signedin", address: owner.address });
       // The first batch is the delivery with its session; the second is the sign-in list's row.
       expect(w.sizes[0]).toBe(2);
       expect(await sessionCount()).toBe(1);
-      expect((await browser.call(w.env, "/api/signin/check", { body: { id: a.body.id, way, scope: "admin" } })).body).toEqual({ status: "used" });
+      expect((await browser.call(w.env, "/api/admin-signin/check", { body: { id: a.body.id, way } })).body).toEqual({ status: "used" });
       expect(await sessionCount()).toBe(1);
     });
   }

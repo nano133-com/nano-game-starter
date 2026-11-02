@@ -4,9 +4,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Env } from "../src/worker/env";
 import { SESSION_DAYS, WAYS } from "@nano133/nanoterra/player-signin";
+import { ADMIN_SESSION_MS } from "@nano133/nanoterra/admin-signin";
+import { adminSigninOf } from "../src/worker/admin";
 import { playerSignin } from "../src/worker/player";
-import { ADMIN_SESSION_MS, adminSession } from "../src/worker/signin";
-import { Browser, signedInWith, walletAnswer, walletFrom } from "./api";
+import { Browser, SIGNIN, signedInWith, walletAnswer, walletFrom } from "./api";
 import { createSession, makeDb, testAccount } from "./helpers";
 
 let env: Env;
@@ -27,15 +28,17 @@ beforeEach(async () => {
 });
 
 const sessionCount = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM sessions").first<{ n: number }>())!.n;
+/** The ADMIN login of a request (the admin sign-in's `session`: the admin cookie only), as the admin handler reads it. */
+const adminSession = (req: Request, now: number) => adminSigninOf(env, now).session(req, now);
 const cookieNames = (res: Response) => res.headers.getSetCookie().map((c) => c.split("=")[0]!.replace(/^__Host-/, ""));
 
 describe("the admin login", () => {
   it("a wallet sign-in started from /admin makes the admin cookie (one day), not the game's", async () => {
     const browser = new Browser();
-    const start = await browser.call(env, "/api/signin/start", { body: { way: "berry", scope: "admin" } });
+    const start = await browser.call(env, "/api/admin-signin/start", { body: { way: "berry" } });
     expect(cookieNames(start.res)).toEqual(["starter-admin"]);
     await walletAnswer(env, "berry", start.body, owner);
-    const done = await browser.call(env, "/api/signin/check", { body: { id: start.body.id, way: "berry", scope: "admin" } });
+    const done = await browser.call(env, "/api/admin-signin/check", { body: { id: start.body.id, way: "berry" } });
     expect(done.body).toEqual({ status: "signedin", address: owner.address });
     expect(cookieNames(done.res)).toEqual(["admin"]);
     const [header] = done.res.headers.getSetCookie();
@@ -86,7 +89,7 @@ describe("the admin login", () => {
   it("sign-out ends only its own login", async () => {
     const browser = await signedInWith(env, "berry", player, "play");
     await signedInWith(env, "berry", owner, "admin", browser);
-    expect((await browser.call(env, "/api/signout", { body: { scope: "admin" } })).status).toBe(200);
+    expect((await browser.call(env, "/api/admin-signin/signout", { body: {} })).status).toBe(200);
     expect(browser.jar.has("admin")).toBe(false);
     expect((await browser.call(env, "/api/admin/summary")).status).toBe(401);
     expect((await browser.call(env, "/api/me")).body).toMatchObject({ address: player.address });
@@ -106,33 +109,39 @@ describe("the admin login", () => {
   it("a request started for the game cannot be finished as an admin login, and the other way round", async () => {
     for (const [started, finished] of [["play", "admin"], ["admin", "play"]] as const) {
       const browser = new Browser();
-      const start = await browser.call(env, "/api/signin/start", { body: { way: "berry", scope: started } });
+      const start = await browser.call(env, `${SIGNIN[started]}/start`, { body: { way: "berry" } });
       await walletAnswer(env, "berry", start.body, owner);
       const before = await sessionCount();
-      const wrong = await browser.call(env, "/api/signin/check", { body: { id: start.body.id, way: "berry", scope: finished } });
-      // The player's sign-in (the package's) holds no admin request: to it the request does not exist ("expired"). The admin's sees a game request as "elsewhere".
-      expect(wrong.body).toEqual({ status: finished === "play" ? "expired" : "elsewhere" });
+      const wrong = await browser.call(env, `${SIGNIN[finished]}/check`, { body: { id: start.body.id, way: "berry" } });
+      // Each sign-in (both the package's) reads only its own scope's rows: to the other one the request does not exist ("expired").
+      expect(wrong.body).toEqual({ status: "expired" });
       expect(wrong.res.headers.getSetCookie()).toEqual([]);
       expect(await sessionCount()).toBe(before);
-      // The right scope still finishes it, once.
-      const right = await browser.call(env, "/api/signin/check", { body: { id: start.body.id, way: "berry", scope: started } });
+      // The right sign-in still finishes it, once.
+      const right = await browser.call(env, `${SIGNIN[started]}/check`, { body: { id: start.body.id, way: "berry" } });
       expect(right.body).toEqual({ status: "signedin", address: owner.address });
     }
   });
 
-  it("any scope but \"admin\" is the game's", async () => {
+  it("on the player's route any scope but \"admin\" is the game's, and the old admin call (`scope: \"admin\"` on /api/signin) is refused: only /api/admin-signin starts an admin request", async () => {
     for (const scope of [undefined, "play", "root", 1, null, ["admin"]]) {
       const browser = new Browser();
       const start = await browser.call(env, "/api/signin/start", { body: { way: "berry", scope } });
       expect(cookieNames(start.res), String(scope)).toEqual(["starter"]);
     }
+    for (const path of ["/api/signin/start", "/api/signin/check", "/api/signout"]) {
+      const old = await new Browser().call(env, path, { body: { way: "berry", id: "x", scope: "admin" } });
+      expect(old.status, path).toBe(400);
+      expect(old.res.headers.getSetCookie(), path).toEqual([]);
+    }
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM signin_requests WHERE scope = 'admin'").first<{ n: number }>())!.n).toBe(0);
   });
 
   it("an admin login after one day is refused, and a sign-out of a login that is not there is fine", async () => {
     const creator = await signedInWith(env, "berry", owner, "admin");
     const later = Date.now() + ADMIN_SESSION_MS + 60_000;
     expect((await creator.call(env, "/api/admin/summary", { now: later })).status).toBe(401);
-    expect((await new Browser().call(env, "/api/signout", { body: { scope: "admin" } })).status).toBe(200);
+    expect((await new Browser().call(env, "/api/admin-signin/signout", { body: {} })).status).toBe(200);
   });
 });
 
@@ -150,12 +159,13 @@ describe("the server keeps the two logins apart, not only the cookies' names", (
 
   it("a request's starter value copied from one scope's cookie to the other's does not finish it", async () => {
     const browser = new Browser();
-    const start = await browser.call(env, "/api/signin/start", { body: { way: "berry", scope: "play" } });
+    const start = await browser.call(env, "/api/signin/start", { body: { way: "berry" } });
     await walletAnswer(env, "berry", start.body, owner);
     browser.jar.set("starter-admin", browser.jar.get("starter")!);
     const before = await sessionCount();
-    const done = await browser.call(env, "/api/signin/check", { body: { id: start.body.id, way: "berry", scope: "admin" } });
-    expect(done.body).toEqual({ status: "elsewhere" });
+    const done = await browser.call(env, "/api/admin-signin/check", { body: { id: start.body.id, way: "berry" } });
+    // The admin's sign-in reads only admin rows: the game's request does not exist for it.
+    expect(done.body).toEqual({ status: "expired" });
     expect(browser.jar.has("admin")).toBe(false);
     expect(await sessionCount()).toBe(before);
   });
@@ -163,10 +173,10 @@ describe("the server keeps the two logins apart, not only the cookies' names", (
   it("another wallet makes no admin login, leaves the owner's admin login alone, and the request stays unused", async () => {
     const browser = await signedInWith(env, "berry", owner, "admin");
     const token = browser.jar.get("admin");
-    const start = await browser.call(env, "/api/signin/start", { body: { way: "nautilus", scope: "admin" } });
+    const start = await browser.call(env, "/api/admin-signin/start", { body: { way: "nautilus" } });
     await walletAnswer(env, "nautilus", start.body, player);
     const before = await sessionCount();
-    const refused = await browser.call(env, "/api/signin/check", { body: { id: start.body.id, way: "nautilus", scope: "admin" } });
+    const refused = await browser.call(env, "/api/admin-signin/check", { body: { id: start.body.id, way: "nautilus" } });
     expect(refused.body).toEqual({ status: "not_owner", address: player.address });
     expect(refused.res.headers.getSetCookie()).toEqual([]);
     expect(browser.jar.get("admin")).toBe(token);
@@ -179,9 +189,9 @@ describe("the server keeps the two logins apart, not only the cookies' names", (
   it("with no receive address, nobody makes an admin login", async () => {
     const none: Env = { ...env, RECEIVE_ADDRESS: "none" };
     const browser = new Browser();
-    const start = await browser.call(none, "/api/signin/start", { body: { way: "berry", scope: "admin" } });
+    const start = await browser.call(none, "/api/admin-signin/start", { body: { way: "berry" } });
     await walletAnswer(none, "berry", start.body, owner);
-    const done = await browser.call(none, "/api/signin/check", { body: { id: start.body.id, way: "berry", scope: "admin" } });
+    const done = await browser.call(none, "/api/admin-signin/check", { body: { id: start.body.id, way: "berry" } });
     expect(done.body).toEqual({ status: "not_owner", address: owner.address });
     expect(browser.jar.has("admin")).toBe(false);
   });
@@ -200,13 +210,13 @@ describe("on https the logins are `__Host-` cookies, one day and thirty days", (
 
   it("start, sign-in and sign-out set the right names, lifetimes and attributes", async () => {
     const browser = new Browser(https);
-    const start = await browser.call(env, "/api/signin/start", { body: { way: "berry", scope: "admin" } });
+    const start = await browser.call(env, "/api/admin-signin/start", { body: { way: "berry" } });
     const [starter] = start.res.headers.getSetCookie();
     expect(starter!.startsWith("__Host-starter-admin=")).toBe(true);
     for (const attr of ["Path=/", "HttpOnly", "SameSite=Lax", "Secure", "Max-Age=1800"]) expect(starter, attr).toContain(attr);
 
     // The wallet app is reached on the same host: it reads the request over https too.
-    const request = await (await import("../src/worker/index")).handleApi(new Request(`${https}/api/signin/nano/${start.body.id}`, { headers: { "CF-Connecting-IP": "198.51.100.9" } }), env, Date.now());
+    const request = await (await import("../src/worker/index")).handleApi(new Request(`${https}/api/admin-signin/nano/${start.body.id}`, { headers: { "CF-Connecting-IP": "198.51.100.9" } }), env, Date.now());
     expect(request.status).toBe(200);
 
     // A game login and an admin login, made directly: the https names and the lifetimes.
@@ -214,12 +224,12 @@ describe("on https the logins are `__Host-` cookies, one day and thirty days", (
     const admin = await createSession(env.DB, owner.address, Date.now(), "wallet", "admin");
     const asReq = (cookie: string) => new Request(`${https}/x`, { headers: { Cookie: cookie } });
     expect((await playerSignin(env).session(asReq(`__Host-session=${game}`)))?.address).toBe(player.address);
-    expect((await adminSession(env.DB, asReq(`__Host-admin=${admin}`), Date.now()))?.address).toBe(owner.address);
+    expect((await adminSession(asReq(`__Host-admin=${admin}`), Date.now()))?.address).toBe(owner.address);
     // The plain names are not read on https (a sibling subdomain can set them; it cannot set a `__Host-` one).
     expect(await playerSignin(env).session(asReq(`session=${game}`))).toBeNull();
-    expect(await adminSession(env.DB, asReq(`admin=${admin}`), Date.now())).toBeNull();
+    expect(await adminSession(asReq(`admin=${admin}`), Date.now())).toBeNull();
     // And each token is good only in its own scope.
-    expect(await adminSession(env.DB, asReq(`__Host-admin=${game}`), Date.now())).toBeNull();
+    expect(await adminSession(asReq(`__Host-admin=${game}`), Date.now())).toBeNull();
     expect(await playerSignin(env).session(asReq(`__Host-session=${admin}`))).toBeNull();
 
     const rows = await env.DB.prepare("SELECT address, expires_at - created_at AS life FROM sessions WHERE address IN (?, ?)").bind(player.address, owner.address).all<{ address: string; life: number }>();
@@ -227,7 +237,7 @@ describe("on https the logins are `__Host-` cookies, one day and thirty days", (
     expect(life[player.address]).toBe(SESSION_DAYS * 86_400_000);
     expect(life[owner.address]).toBe(ADMIN_SESSION_MS);
 
-    const out = await browser.call(env, "/api/signout", { body: { scope: "admin" } });
+    const out = await browser.call(env, "/api/admin-signin/signout", { body: {} });
     const [cleared] = out.res.headers.getSetCookie();
     expect(cleared!.startsWith("__Host-admin=")).toBe(true);
     expect(field(cleared!, "Max-Age")).toBe("Max-Age=0");

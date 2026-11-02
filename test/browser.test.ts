@@ -1,6 +1,7 @@
-// The short browser name and the rough country that the admin's sign-in list keeps. Only fixed words come out: nothing of the browser's own text.
+// The short browser name and the rough country that the admin's sign-in list keeps (the package's admin sign-in writes them: @nano133/nanoterra/admin-signin).
+// Only fixed words come out: nothing of the browser's own text.
 import { describe, expect, it } from "vitest";
-import { countryOf, shortBrowser } from "../src/worker/browser";
+import { countryOf, shortBrowser } from "@nano133/nanoterra/admin-signin";
 
 const UA = {
   chromeMac: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",

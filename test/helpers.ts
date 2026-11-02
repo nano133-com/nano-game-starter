@@ -10,7 +10,7 @@ import { blake2b } from "@noble/hashes/blake2.js";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import * as nanoNs from "nanocurrency-web";
 import { SESSION_DAYS } from "@nano133/nanoterra/player-signin";
-import { ADMIN_SESSION_MS, adminKey } from "../src/worker/signin";
+import { ADMIN_SESSION_MS, adminKey } from "@nano133/nanoterra/admin-signin";
 
 const MIGRATIONS = ["migrations/0001_init.sql", "migrations/0002_wallet_apps.sql", "migrations/0003_nanoterra.sql", "migrations/0004_nanoterra_record.sql", "migrations/0005_admin_logins.sql", "migrations/0006_signin_scope.sql", "migrations/0007_friends.sql", "migrations/0008_player_signin.sql"];
 
@@ -30,7 +30,7 @@ export async function makeDb(): Promise<{ db: D1Database; close: () => Promise<v
 
 /**
  * A session row as the game's two sign-ins write it, and the cookie's token: the player's (scope "play", the package's: the token's plain SHA-256,
- * 30 days) or the admin's (scope "admin", src/worker/signin.ts: the SHA-256 of "admin:" and the token, one day). `via` is written as given (a test
+ * 30 days) or the admin's (scope "admin", the package's admin sign-in: the SHA-256 of "admin:" and the token, one day). `via` is written as given (a test
  * may write a word the game never writes).
  */
 export async function createSession(db: D1Database, address: string, now: number, via: string, scope: "play" | "admin" = "play"): Promise<string> {

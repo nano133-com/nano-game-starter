@@ -125,7 +125,7 @@ describe("the admin guard, with each wallet", () => {
     it(`${way}: opens for the receive address, and refuses another address`, async () => {
       if (way === "nanchat") {
         // NanChat cannot name the admin in what it signs, so it does not open the admin at all (the page does not offer it, and the server refuses it).
-        const start = await new Browser().call(env, "/api/signin/start", { body: { way, scope: "admin" } });
+        const start = await new Browser().call(env, "/api/admin-signin/start", { body: { way } });
         expect(start.status).toBe(400);
         expect(start.body.error).toMatch(/NanChat cannot open the admin/);
         return;
@@ -137,17 +137,19 @@ describe("the admin guard, with each wallet", () => {
 
       // Another address signs, and no admin login is made for it.
       const someone = new Browser();
-      const start = await someone.call(env, "/api/signin/start", { body: { way, scope: "admin" } });
+      const start = await someone.call(env, "/api/admin-signin/start", { body: { way } });
       await walletAnswer(env, way, start.body, player);
-      const done = await someone.call(env, "/api/signin/check", { body: { id: start.body.id, way, scope: "admin" } });
+      const done = await someone.call(env, "/api/admin-signin/check", { body: { id: start.body.id, way } });
       expect(done.body).toEqual({ status: "not_owner", address: player.address });
       expect(someone.jar.has("admin")).toBe(false);
       expect((await someone.call(env, "/api/admin/summary")).status).toBe(401);
     });
   }
 
-  it("refuses a way that is not one of the game's", async () => {
-    expect((await new Browser().call(env, "/api/signin/start", { body: { way: "natrium" } })).status).toBe(400);
-    expect((await new Browser().call(env, "/api/signin/check", { body: { id: "x", way: "natrium" } })).status).toBe(400);
+  it("refuses a way that is not one of the game's, on the player's sign-in and on the admin's", async () => {
+    for (const base of ["/api/signin", "/api/admin-signin"]) {
+      expect((await new Browser().call(env, `${base}/start`, { body: { way: "natrium" } })).status, base).toBe(400);
+      expect((await new Browser().call(env, `${base}/check`, { body: { id: "x", way: "natrium" } })).status, base).toBe(400);
+    }
   });
 });

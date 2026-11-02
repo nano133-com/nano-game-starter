@@ -2,18 +2,15 @@
 // 10 minutes. The game's files (index.html, admin.html, /assets) are served by Cloudflare without it.
 
 import { signinOn, type Signin } from "@nano133/nanoterra/admin";
-import { d1Limit, visitorKey } from "@nano133/nanoterra/shop/d1";
-import { SHOP_LIMITS, turnstileCheck } from "@nano133/nanoterra/shop/worker";
-import { nautilusReply } from "@nano133/signin";
+import { SHOP_LIMITS } from "@nano133/nanoterra/shop/worker";
 import { CONFIG } from "../shared/config";
-import { adminHandler, settingsOf } from "./admin";
+import { adminHandler, adminSigninOf, settingsOf } from "./admin";
 import { FRIENDS_BASE, friendsHandler } from "./friends";
 import { receiveAddress, type Env } from "./env";
-import { fail, json, readJson, sameOrigin, secure, visitorIp } from "./http";
+import { fail, json, sameOrigin, secure, visitorIp } from "./http";
 import { callback as nanoterraCallback, cancel as nanoterraCancel, confirm as nanoterraConfirm, playerOf, signinOff, start as nanoterraStart } from "./nanoterra";
 import { playerSignin, shopOf } from "./player";
 import { LIMITS, memoryLimit } from "./ratelimit";
-import { ADMIN_LOGIN_KEEP_MS, checkSignin, nautilusRoute, signOut, startSignin, walletRoute, wayOf } from "./signin";
 import { warm } from "./warm";
 
 if (!warm) console.warn("the signature warm-up check failed");
@@ -57,25 +54,20 @@ export async function handleApi(req: Request, env: Env, now = Date.now()): Promi
     return new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": origin, "Access-Control-Allow-Methods": "GET, POST", "Access-Control-Allow-Headers": "Content-Type", Vary: "Origin" } });
   }
 
-  // The PLAYER's sign-in (the package's: a passkey or a wallet app). It answers its own calls and leaves the admin's to this file (`sharedPaths`).
+  // The ADMIN's sign-in (the package's, on its own route /api/admin-signin: see admin.ts). It answers only its own paths, with its own limits (the
+  // wallet apps' calls 30 a minute and the checks 90 a minute per address, the starts 20 in 10 minutes per visitor in D1), the same-origin rule for the
+  // page's calls, and the person check; any other path is null and goes on.
+  const adminSignin = await adminSigninOf(env, now).handle(req);
+  if (adminSignin) return adminSignin;
+
+  // The PLAYER's sign-in (the package's: a passkey or a wallet app), on /api/signin and /api/signout.
   const signin = playerSignin(env, now);
 
-  // The wallet apps' routes: no cookie and no Origin (an app, or NanChat's relay server, posts them: not a browser page). The player's sign-in answers
-  // a request it holds (and every NanChat answer: the admin has no NanChat); an ADMIN request goes on to the admin's own routes.
-  const wallet = path.match(/^\/api\/signin\/nano\/([0-9a-f]{32})$/);
-  const walletPath = wallet !== null || path === "/api/signin/nautilus" || path === "/api/signin/nanchat";
+  // The wallet apps' routes: no cookie and no Origin (an app, or NanChat's relay server, posts them: not a browser page). The player's sign-in answers them.
+  const walletPath = /^\/api\/signin\/nano\/[0-9a-f]{32}$/.test(path) || path === "/api/signin/nautilus" || path === "/api/signin/nanchat";
   if (walletPath) {
     const answer = await signin.handle(req);
     if (answer) return answer;
-  }
-  if (wallet && (method === "GET" || method === "POST")) {
-    if (!memoryLimit(`wallet|${ip}`, LIMITS.wallet.limit, LIMITS.wallet.windowMs, now)) return fail(429, "Too many requests.");
-    return walletRoute(env, req, wallet[1]!, () => now);
-  }
-  if (path === "/api/signin/nautilus" && method === "POST") {
-    // Nautilus shows the words of a refusal only with HTTP 200.
-    if (!memoryLimit(`wallet|${ip}`, LIMITS.wallet.limit, LIMITS.wallet.windowMs, now)) return json(nautilusReply(url.host, "Too many requests. Wait a minute."));
-    return nautilusRoute(env, req, () => now);
   }
 
   const pollRoute = path === "/api/signin/check" || /^\/api\/orders\/[0-9a-f]{24}\/check$/.test(path);
@@ -111,23 +103,6 @@ export async function handleApi(req: Request, env: Env, now = Date.now()): Promi
     });
   }
 
-  // The ADMIN's sign-in (`scope: "admin"`): the player's sign-in above has answered every other call of these paths.
-  if (method === "POST" && path === "/api/signin/start") {
-    const body = await readJson(req);
-    const way = wayOf(body.way);
-    if (!way) return fail(400, "That wallet is not one of this game's.");
-    if (!(await d1Limit(db, `signin|${await visitorKey(db, req)}`, LIMITS.signinStart.limit, LIMITS.signinStart.windowMs, now))) return fail(429, "Too many sign-ins. Wait a few minutes.");
-    if (!(await turnstileCheck(env, body.turnstile, req.headers.get("CF-Connecting-IP")))) return fail(403, "The person check failed. Try again.");
-    return startSignin(env, req, way, () => now);
-  }
-  if (method === "POST" && path === "/api/signin/check") {
-    const body = await readJson(req);
-    const way = wayOf(body.way);
-    if (!way) return fail(400, "That wallet is not one of this game's.");
-    return checkSignin(db, req, body.id, way, now, receiveAddress(env));
-  }
-  if (method === "POST" && path === "/api/signout") return signOut(db, req);
-
   const order = await shop.handle(req);
   if (order) return order;
 
@@ -158,17 +133,12 @@ export async function handleApi(req: Request, env: Env, now = Date.now()): Promi
 }
 
 /**
- * Deletes rows nobody needs any more: the admin's old requests and ended logins, old limit counters, admin sign-in rows past 30 days. (The player's
- * rows are the player sign-in's `clean()`.) Orders stay: they are the creator's sales record.
+ * Deletes rows nobody needs any more: old limit counters. (The player's rows are the player sign-in's `clean()`; the admin's old requests, ended logins
+ * and sign-in rows past 30 days are the admin sign-in's `clean()`.) Orders stay: they are the creator's sales record.
  */
 async function cleanUp(db: D1Database, now: number) {
-  await db.batch([
-    db.prepare("DELETE FROM signin_requests WHERE expires_at < ? AND scope = 'admin'").bind(now - 2 * 3_600_000),
-    db.prepare("DELETE FROM sessions WHERE expires_at < ? AND scope = 'admin'").bind(now),
-    // Every D1 counter (new orders, sign-in starts, NanChat's totals, Nanoterra's once-only keys) counts in 10-minute windows.
-    db.prepare("DELETE FROM hits WHERE win < ?").bind(Math.floor((now - 86_400_000) / SHOP_LIMITS.order.windowMs)),
-    db.prepare("DELETE FROM admin_logins WHERE at < ?").bind(now - ADMIN_LOGIN_KEEP_MS),
-  ]);
+  // Every D1 counter (new orders, sign-in starts, NanChat's totals, Nanoterra's once-only keys) counts in 10-minute windows.
+  await db.prepare("DELETE FROM hits WHERE win < ?").bind(Math.floor((now - 86_400_000) / SHOP_LIMITS.order.windowMs)).run();
 }
 
 export default {
@@ -202,6 +172,7 @@ export default {
         const scan = await shopOf(env, now).scan(now);
         if (scan.error) console.warn("payment scan", scan.error);
         await playerSignin(env, now).clean(now);
+        await adminSigninOf(env, now).clean(now);
         await cleanUp(env.DB, now);
       })(),
     );
