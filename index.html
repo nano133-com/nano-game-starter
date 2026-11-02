@@ -34,7 +34,17 @@
         <div class="card">
           <h1>%GAME_NAME%</h1>
           <p>%GAME_LINE%</p>
-          <button id="play" class="btn btn-primary btn-big" type="button">Play</button>
+          <!-- Loading: Play says "Loading…" until the game is ready (main.ts). These notes need no script: style.css shows the
+               first after --boot-slow (8 s) and the second, with its "Try again" link, after --boot-stall (30 s). -->
+          <button id="play" class="btn btn-primary btn-big" type="button" disabled aria-busy="true">Loading…</button>
+          <p class="boot-note boot-slow" role="status">Still loading. Your connection is slow.</p>
+          <div class="boot-stall" role="status">
+            <p class="boot-note">This is taking too long. Check your connection, then try again.</p>
+            <a class="btn btn-primary btn-big" href="">Try again</a>
+          </div>
+          <!-- public/boot.js: what to say when a file of the game failed. -->
+          <p id="boot-note" class="boot-note" role="alert" hidden></p>
+          <button id="boot-retry" class="btn btn-primary btn-big" type="button" hidden>Try again</button>
           <ul class="how">
             <li><strong>Phone:</strong> left thumb moves, right thumb turns the camera, Jump to jump.</li>
             <li><strong>Computer:</strong> WASD or arrows move, drag the mouse to look, Space jumps.</li>
@@ -59,7 +69,15 @@
           <button id="end-looks" class="btn" type="button">Looks</button>
         </div>
       </section>
+
+      <div id="boot-bar" class="boot-bar" role="status" aria-live="polite" hidden>
+        <span id="boot-bar-text"></span>
+        <button id="boot-bar-reload" class="btn btn-small btn-primary" type="button" hidden>Reload</button>
+        <button id="boot-bar-close" class="btn btn-small" type="button">Close</button>
+      </div>
     </div>
     <script type="module" src="/src/client/main.ts"></script>
+    <!-- After the game's script (the browser runs the two in this order): it tells a failed load from a new version. -->
+    <script src="/boot.js" defer></script>
   </body>
 </html>

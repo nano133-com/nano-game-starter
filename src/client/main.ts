@@ -351,6 +351,16 @@ accountBtn.addEventListener("click", () => {
   showAccount();
 });
 
+// ---- ready ----
+// The start card painted before this script came (index.html), with Play as "Loading…". The game can start now: Play says so, and
+// `data-boot` hides the loading notes (style.css) and tells public/boot.js that this script ran. Nothing below waits for the
+// network: /api/config may answer later.
+const play = $<HTMLButtonElement>("play");
+play.disabled = false;
+play.removeAttribute("aria-busy");
+play.textContent = "Play";
+document.documentElement.dataset.boot = "ready";
+
 // ---- start ----
 
 (async () => {

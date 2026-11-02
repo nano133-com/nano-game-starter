@@ -19,7 +19,8 @@ creator's address. The Worker holds **no key**: it only reads the Nano ledger to
 | `src/client/game/` | The game: `world.ts` (the level), `character.ts` (what a character does, and the penguin), `nanoterraCharacter.ts` (the Nanoterra character), `hat.ts`, `gems.ts`, `controls.ts` (keys and thumbs; they let go when the page is left: `releaseWhenLost` from `@nano133/nanoterra/input`), `game.ts` (rules, speed, camera). `main.ts` pauses a free round when the player leaves the page (`pauseWhenLeft`, same path) and keeps it paused until Resume; a round that costs money must not stop its clock. Safe to change. |
 | `src/client/options.ts` | The player's settings (`@nano133/nanoterra/options`): one store, kept in this browser (`n133-options:gem-island`), with the Options key and panel mounted in `main.ts`. See "The options menu" below. |
 | `src/client/ui/`, `src/client/style.css` | The account sheet and the look of the page. The Looks sheet, the pay sheet, the player's sign-in sheet and the admin's sign-in **are the package's** (see "The shop and the player's sign-in" and "The admin's sign-in"); `style.css` only gives them the game's colours. Change with care (see "Never change"). |
-| `public/` | Static files: `art/wide.jpg`, `art/tall.jpg`, `favicon.svg`, and `nanoterra.css` (the look of the sign-in pages: see "Safe changes"). |
+| `public/` | Static files: `art/wide.jpg`, `art/tall.jpg`, `favicon.svg`, `nanoterra.css` (the look of the sign-in pages: see "Safe changes"), and `boot.js` (what the start card says when the game's files do not come: see "Slow networks"). |
+| `scripts/` | `check-slow.mjs` (`npm run check:slow`) and `compress-models.mjs` (`npm run compress:models`): see "Slow networks". |
 | `src/worker/` | The server. See "Never change". The shop and the player's sign-in are the package's: `src/worker/player.ts` only sets them up on this game's tables and settings. The admin's sign-in is the package's too: `src/worker/admin.ts` sets it up. |
 | `src/shared/scheme.ts` | The FROZEN passkey scheme of this game (see "The shop and the player's sign-in"). Set your domain in it once, before the first player; never change it after. |
 | `src/shared/` | Code for both sides: looks (`looks.ts`, with the rules in `@nano133/nanoterra/looks`), config, the passkey scheme, security headers. |
@@ -72,8 +73,43 @@ npm run check      # typecheck + tests + build: run it before every commit
   `test/lookModels.test.ts` runs the package's cosmetic check (`@nano133/nanoterra/model`, `COSMETIC_LIMITS[slot]`) on every model there: never
   add an exception to make a new model pass. In a run, `hold` in `worn.ts` turns a hand model down (the elbow's bend would lift it in front of the
   face); a back model gets the package's `hideTail` and `hideWings`.
-- Keep the first load small (no big model or sound files without a reason), and keep 60 frames a
-  second on a mid-range phone: few objects, simple materials, no real-time shadows.
+- Keep the first load small (see "Slow networks"), and keep 60 frames a second on a mid-range phone: few objects, simple
+  materials, no real-time shadows.
+
+## Slow networks
+
+Many players are on a phone with a weak signal. On 3G the game must show its start card at once, say what it is doing, and
+never leave a white screen or a loader that does not end. Six rules:
+
+1. **The start card comes before the script.** `index.html` paints the card with the Play key as "Loading…" (disabled); `main.ts`
+   makes it "Play" when the game can start (`data-boot="ready"` on `<html>`). Keep the card in `index.html`, and never make the
+   start wait for the network: `/api/config` and `/api/me` answer later.
+2. **Every wait ends, and says the right thing.** `style.css` shows "Still loading. Your connection is slow." after `--boot-slow`
+   (8 s) and, in place of Play, "This is taking too long. Check your connection, then try again." with a "Try again" link after
+   `--boot-stall` (30 s): no script needed. `public/boot.js` runs right after the game's script (index.html loads it after; the
+   Content Security Policy allows no inline script). When the game's script did not run, it asks the server for the page again:
+   another game script there means a deploy ("A new version of the game is out.", key "Reload"); no answer, or the same script,
+   means the network ("The game did not load. Check your connection, then try again.", key "Try again"). Never tell a player
+   about a new version when it was the network. A part that loads later with `import()` and fails shows "Part of the game did
+   not load. Check your connection." and the game goes on. A loader of your own needs the same: a time limit and a Try again.
+3. **Load later what is used later** (`import()` or `fetch` at the moment of use): a look's model (`worn.ts`), the emotes, a level
+   the player has not reached. **Sounds load after the first tap, never before Play** (a browser plays no sound before a tap
+   anyway). The starter has no sound; a game that adds music starts its download from the Play key's press.
+4. **Small models.** After you add or change a `.glb` in `public/`, run `npm run compress:models`, then `npm test`. Cloudflare
+   does not compress `.glb` files, so their size on disk is what the phone downloads. The script stores normals and colours in
+   fewer bytes (KHR_mesh_quantization; three.js reads it with no decoder) and keeps positions and names as they are, so the kit's
+   cosmetic check still reads the model (the shovel: 48 KB to 29 KB). Do not use meshopt or Draco compression: their decoders
+   need WebAssembly, which the Content Security Policy does not allow (see "Never change", 7), and the kit's check refuses them.
+5. **Keep the first download under the budget:** 300 KB before Play on a phone (the starter is about 220 KB). A big library,
+   picture or model goes in a chunk that loads later (`import()`), never in the imports of `main.ts`.
+6. **Run the check.** `npm run check:slow` builds the game, serves it on 127.0.0.1 as Cloudflare would (Brotli, the same headers),
+   and loads it in Google Chrome at Slow 4G (1.6 Mbps, 750 kbps up, 150 ms) and 3G (400 kbps, 400 ms): a phone (390x844), a
+   tablet and a computer, each with an empty cache. It prints the bytes before Play, the first paint and the time to Play, and
+   fails over the budget (phone: 300 KB; paint 2 s / 3 s; Play 4 s / 8 s, on Slow 4G / 3G; why: `BUDGET` in the script). Then it
+   breaks the network on purpose (a failed script, a new deploy, a stalled script, a part that fails after the start) and checks
+   the words and keys above; the pictures go to `dist/slow-check/`. A good result for the starter: phone, 3G, about 222 KB, the
+   card at 1.6 s, Play at 5.5 s, four "ok" lines and "Passed." Run it after you add a file, a library or a loader, and before you
+   deploy. It needs Google Chrome installed (`--phone` checks the phone only; `--no-faults` skips the broken network).
 
 ## Rules for looks
 
