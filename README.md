@@ -75,7 +75,7 @@ Open `/admin` and press the **Cosmetics** tab (the Shelf). It shows each look wi
 drawn once when the Shelf opens: `src/client/ui/lookPreview.ts`), its price (and its step on the
 [price ladder](https://nano133.com/build/cosmetics), from 1¢ to $1), and what it has sold in your own database. Press
 **Edit the shelf** to change a name, a price, a colour or a hat, add a look, or copy one. The page checks every change with
-the rules of the looks ladder in [`@nano133/nanoterra`](https://www.npmjs.com/package/@nano133/nanoterra) (path `/looks`): at least one free look, prices in whole cents, and **a
+the rules of the looks ladder in [`@nano133/nanoterra`](https://www.npmjs.com/package/@nano133/nanoterra) (path `/looks`): at least one free look, prices with at most 4 decimals (no minimum: $0.005 is half a cent), and **a
 look that a player owns stays in the file** (it cannot be removed here).
 
 **The Shelf changes nothing in your game.** It works on a draft in your browser and sends nothing to the server, nothing to nano133.com and

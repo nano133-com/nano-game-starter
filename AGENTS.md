@@ -82,10 +82,10 @@ npm run check      # typecheck + tests + build: run it before every commit
   items, no chances.**
 - **Never change or remove the `id` of a look that someone may own.** Owned looks are stored by id.
   To retire a look, keep it in the file.
-- Prices are in US dollars with at most 2 decimals. The server reads them from `looks.json`; the
-  browser never decides a price.
+- Prices are in US dollars with at most 4 decimals: there is no minimum, so a fraction of a cent works (`0.005` is half a
+  cent). The server reads them from `looks.json`; the browser never decides a price.
 - The rules of the file are in the package `@nano133/nanoterra`, path `/looks` (`checkLooks`, `lookProblems`, `removalProblems`, `looksJson`). Use them; do not
-  copy them. (The old check refused $0.07, $0.29 and $1.10: `wholeCents` fixes that.)
+  copy them. (The old check refused $0.07, $0.29 and $1.10: `priceStepOk` and `wholeCents` compare a price with its own decimal text.)
 - **The Shelf (`/admin`) never writes.** It edits a draft in the creator's browser and gives text to copy. Do not add a server call that
   changes `looks.json`, the database's looks or prices: an editor would give the server a new way to change data. A change of looks is a
   change of the repository, pushed to GitHub. **The "Game" card is not the Shelf:** its two switches, the friends list and the emotes (`POST /api/admin/game`) write only the four
