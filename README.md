@@ -306,8 +306,7 @@ The starter's `plays.json` is an empty list (`[]`): no Play key shows, there is 
 A paid round buys one turn of the game and nothing else. It never wins money or a prize worth money, nothing in it is random, and nothing a
 player buys makes the game easier to win. Some places have laws about paid games: ask a lawyer before you turn test mode off.
 
-**Prompt 5 of the nano133 prompt pack ("Charge for a round") does all of this for you.** Your AI assistant also has the kit's skill
-`add-paid-rounds`. To add one by hand:
+**Your AI assistant can do this for you with the kit's skill `add-paid-rounds`.** To add one by hand:
 
 1. Put a play in `plays.json`, for example an "Extra round" for 5¢:
 
