@@ -185,6 +185,13 @@ Both come from the package `@nano133/nanoterra` (since 0.9.0). The game does not
   looks.json, player })` from `/shop/worker`; the cron (`*/10`, `scheduled` in `src/worker/index.ts`) and the admin's "Check payments now" call `shop.scan()`.
   The page mounts `mountShop` (`/shop/panel`, with `key: false`: the game's own Looks keys call `shop.open()`) and its stylesheet. The tables are the game's own
   (`orders`, `owned`, `meta`, `hits`, from `migrations/0001_init.sql`): the package reads and writes them as they are.
+- **Paid rounds** (kit 0.15.0, `plays.json`; the kit's skill `add-paid-rounds` and its SPEC step 15): the shop gets `plays` and `legal` (`loadLegal` of the
+  admin store, `createD1Store(env.DB, { plays: true })`), the admin handler `plays` and `unmatched`, `mountAdmin` `plays`, and the page `mountShop` with
+  `plays` and `onCredit` and two `shop.playKey`s. `startPaidRound` (`src/client/main.ts`) makes a NEW round id, posts `/api/plays/use`, and starts the
+  round only after `{ used: true }`; a paid round never pauses. The tables are `migrations/0010_plays.sql` (the kit's `shop/d1-plays.sql`). A paid round
+  buys one turn and nothing else: never a prize, a ticket, money, anything random or a better chance to win. Never change the Legal card's defaults, never
+  press the owner's confirmation, never turn test mode off, and never add a key or a send for money back (the admin lists it; the owner sends it by hand).
+  A pretend payment exists only in tests (`test/paid-round.test.ts`).
 - **The player's sign-in** (`@nano133/nanoterra/player-signin`): a passkey, or Berry Wallet, NanChat or Nautilus, on `/api/signin/*` and `/api/signout`, with
   the session cookie `session`. `src/worker/player.ts` makes it with `createPlayerSignin({ store: createD1PlayerSignin(env.DB), ... })`. The ADMIN signs in on a
   route of its own (`/api/admin-signin`, see "The admin's sign-in"): a call on the player's paths with `scope: "admin"` (the old admin call) is refused. Everything

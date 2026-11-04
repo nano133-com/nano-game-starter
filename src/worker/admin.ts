@@ -14,6 +14,7 @@ import { d1Limit, visitorKey } from "@nano133/nanoterra/shop/d1";
 import { turnstileCheck } from "@nano133/nanoterra/shop/worker";
 import { CONFIG } from "../shared/config";
 import { lookById } from "../shared/looks";
+import plays from "../../plays.json" with { type: "json" };
 import { githubRepo, receiveAddress, type Env } from "./env";
 import { shopOf } from "./player";
 import { memoryLimit } from "./ratelimit";
@@ -55,7 +56,7 @@ export const gameDefaults = { character: CONFIG.character, signin: CONFIG.signin
  */
 export function gameStore(env: Env): AdminStore {
   const signin = createD1AdminSignin(env.DB);
-  return { ...createD1Store(env.DB), recentLogins: (limit) => signin.recentLogins(limit), signOutEverywhere: () => signin.signOutEverywhere() };
+  return { ...createD1Store(env.DB, { plays: true }), recentLogins: (limit) => signin.recentLogins(limit), signOutEverywhere: () => signin.signOutEverywhere() };
 }
 
 /**
@@ -74,6 +75,10 @@ function adminStatus(env: Env, s: StoreSummary, friends: Friends): AdminStatus {
   const warnings = [...shop.warnings];
   if (s.counts.paid_late === 1) warnings.push('1 payment came late. Send it back by hand from your wallet (see "Paid late").');
   if (s.counts.paid_late > 1) warnings.push(`${s.counts.paid_late} payments came late. Send each one back by hand from your wallet (see "Paid late").`);
+  // The paid rounds to send back (a credit not used in time, of a play no longer sold, or of a deleted player); the late payments are counted above.
+  const rounds = s.sendBack?.length ?? 0;
+  if (rounds === 1) warnings.push('1 paid round goes back to its payer. Send it back by hand from your wallet (see "To send back").');
+  if (rounds > 1) warnings.push(`${rounds} paid rounds go back to their payers. Send each one back by hand from your wallet (see "To send back").`);
   // Nanoterra's friends window needs the game's id there; until it is set the game draws no Friends key.
   if (friends === "nanoterra" && !CONFIG.nanoterraId) warnings.push('Friends list: add "nanoterraId" to game.config.json (your game\'s id on Nanoterra) after Nanoterra lists your game.');
   return { address: shop.address, testMode: shop.testMode, turnstile: shop.turnstile, nodes: shop.nodes, repo: githubRepo(env), warnings };
@@ -91,6 +96,8 @@ export function adminHandler(env: Env, now: number, ip: string): AdminHandler {
     status: async (_at, s) => adminStatus(env, s, (await settingsOf(env)).friends),
     lookName: (id) => lookById(id)?.name,
     check: (at) => shopOf(env, now).scan(at),
+    plays,
+    unmatched: (at, since) => shopOf(env, now).unmatched(at, since),
     limit: (key, limit, windowMs, at) => memoryLimit(`${key}|${ip}`, limit, windowMs, at),
     now: () => now,
     onError: (e) => console.error("admin failed", e instanceof Error ? e.message : String(e)),

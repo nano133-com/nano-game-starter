@@ -5,6 +5,7 @@
 import "./style.css";
 import { CONFIG } from "../shared/config";
 import { FREE_LOOK, isOutfit, LOOKS, outfitById, type Outfit } from "../shared/looks";
+import plays from "../../plays.json";
 import { SCHEME } from "../shared/scheme";
 import { pauseWhenLeft } from "@nano133/nanoterra/input";
 import { mountFriends, type MountedFriends } from "@nano133/nanoterra/friends/panel";
@@ -166,6 +167,8 @@ sheet.onOpenChange = () => {
 // This is for a FREE round. If you make a round cost money, keep the controls' release but do not stop its clock:
 // a paid round's deadline must not move (the nano133 arcade follows the same rule).
 function pauseForLeave() {
+  // A paid round never pauses: its deadline must not move. The controls still let go.
+  if (paidRound && game.playing) return void game.controls.release();
   if (!game.playing || !pausedCard.hidden || covered()) return;
   game.paused = true;
   game.controls.enabled = false;
@@ -226,6 +229,9 @@ async function refreshMe() {
 // The game's own keys open it (`key: false`): Looks in the top bar and on the end card.
 const shop = mountShop($("app"), {
   looks: LOOKS,
+  plays,
+  // A paid play order gave one credit: the Play keys read the credits again.
+  onCredit: () => void shop.ready().catch(() => null),
   key: false,
   owned: () => me.owned,
   signedIn: () => Boolean(me.address),
@@ -303,6 +309,7 @@ async function signIn(): Promise<boolean> {
   me = await get<Me>("/api/me").catch(() => ({ address: player.address, owned: [], admin: false, via: player.via }));
   renderAccount();
   dress();
+  void shop.ready().catch(() => null);
   return Boolean(me.address);
 }
 
@@ -331,12 +338,34 @@ function showAccount() {
 
 // ---- buttons ----
 
+// ---- a paid round (plays.json) ----
+// The round's start uses ONE credit: a new round id for each round, and the round starts only after the server says "used".
+let paidRound = false;
+const PLAY_ID = "extra-round";
+async function startPaidRound(playId: string) {
+  const ref = crypto.randomUUID();
+  const r = await post<{ used: boolean; again: boolean }>("/api/plays/use", { playId, ref }).catch(() => null);
+  await shop.ready().catch(() => null);
+  if (!r?.used) return;
+  start.hidden = true;
+  end.hidden = true;
+  paidRound = true;
+  game.start();
+  showWhere();
+}
+for (const after of ["play", "again"]) {
+  const key = shop.playKey(PLAY_ID, (id) => void startPaidRound(id));
+  if (key) $(after).after(key);
+}
+
 $("play").addEventListener("click", () => {
+  paidRound = false;
   start.hidden = true;
   game.start();
   showWhere();
 });
 $("again").addEventListener("click", () => {
+  paidRound = false;
   end.hidden = true;
   game.start();
   showWhere();
@@ -374,6 +403,7 @@ document.documentElement.dataset.boot = "ready";
   if (config.character) game.setCharacter(config.character);
   renderAccount();
   dress();
+  if (me.address) void shop.ready().catch(() => null);
   startFriends();
   startEmotes();
 })();

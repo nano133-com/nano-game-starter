@@ -14,7 +14,7 @@ const player = testAccount();
 beforeAll(async () => ({ db, close } = await makeDb()));
 afterAll(() => close());
 beforeEach(async () => {
-  for (const t of ["orders", "owned", "sessions", "hits", "meta"]) await db.prepare(`DELETE FROM ${t}`).run();
+  for (const t of ["orders", "owned", "credits", "sessions", "hits", "meta"]) await db.prepare(`DELETE FROM ${t}`).run();
   // A fresh price, so no test asks a real price feed.
   await db.prepare("INSERT INTO meta (key, value, at) VALUES ('rate', ?, ?)").bind(JSON.stringify({ usd: 1, sources: ["test"] }), Date.now()).run();
 });
@@ -171,5 +171,29 @@ describe("test mode", () => {
     const l = listing(live(), req);
     expect(l).toMatchObject({ nanoGame: 1, play: `${ORIGIN}/`, creator: { nano: owner.address }, multiplayer: false, regions: ["Global"], ages: "18+" });
     expect(JSON.stringify(l)).not.toMatch(/price|usd|look/i);
+  });
+});
+
+describe("the paid rounds to send back (kit 0.15.0)", () => {
+  it("the status warns once for each paid round that goes back, apart from the late payments", async () => {
+    const now = Date.now();
+    const DAY = 86_400_000;
+    // Two paid plays whose credits passed their end unused, and one late payment of a look: two rounds to send back, one late payment.
+    const order = db.prepare("INSERT INTO orders (id, player, look_id, usd, rate, amount, status, created_at, expires_at, hold_until, hash, payer, paid_at, kind, use_days) VALUES (?, ?, ?, '0.05', 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    const credit = db.prepare("INSERT INTO credits (order_id, player, play_id, granted_at, expires_at) VALUES (?, ?, 'extra-round', ?, ?)");
+    for (const [i, id] of ["a".repeat(24), "b".repeat(24)].entries()) {
+      const at = now - 40 * DAY + i;
+      await order.bind(id, player.address, "extra-round", `5000000000000000000000000000${i}`, "paid", at, at + 900_000, at + 4_500_000, `${"A".repeat(63)}${i}`, player.address, at + 1000, "play", 30).run();
+      await credit.bind(id, player.address, at + 1000, at + 1000 + 30 * DAY).run();
+    }
+    const late = now - 2 * DAY;
+    await order.bind("c".repeat(24), player.address, "red-coat", "250000000000000000000000000000", "paid_late", late, late + 900_000, late + 4_500_000, "C".repeat(64), player.address, late + 2_000_000, "look", null).run();
+
+    const r = await (await adminIn(owner.address)).call(live(), "/api/admin/summary");
+    expect(r.status).toBe(200);
+    expect(r.body.sendBack.map((x: { orderId: string; why: string }) => [x.orderId, x.why])).toEqual([["a".repeat(24), "not_used_in_time"], ["b".repeat(24), "not_used_in_time"]]);
+    const words = r.body.warnings.join(" ");
+    expect(words).toMatch(/2 paid rounds go back to their payers\. Send each one back by hand from your wallet \(see "To send back"\)\./);
+    expect(words).toMatch(/1 payment came late\./);
   });
 });

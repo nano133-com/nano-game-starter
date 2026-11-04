@@ -4,9 +4,9 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { CONFIG } from "../src/shared/config";
-import { CHARACTER_NEEDS_SIGNIN, CHARACTER_SIGNIN_OFF, isCharacter, isSigninChoice, parsePatch, pressOf, REVIEW_NOTE, signinOn, stateOf, SWITCHES } from "@nano133/nanoterra/admin";
+import { CHARACTER_NEEDS_SIGNIN, CHARACTER_SIGNIN_OFF, DEFAULT_LEGAL, isCharacter, isSigninChoice, parsePatch, pressOf, REVIEW_NOTE, signinOn, stateOf, SWITCHES } from "@nano133/nanoterra/admin";
 import { EXAMPLE_ADDRESS, type Env } from "../src/worker/env";
-import worker from "../src/worker/index";
+import worker, { listing } from "../src/worker/index";
 import { Browser, ORIGIN } from "./api";
 import { createSession, makeDb, testAccount } from "./helpers";
 
@@ -81,7 +81,7 @@ describe("the Game switches through the Worker", () => {
     const r = await (await adminIn(owner.address)).call(live(), "/api/admin/game");
     expect(r.status).toBe(200);
     // The friends list and the emotes are the package's own defaults ("nanoterra", "on"): game.config.json does not name them.
-    expect(r.body).toEqual({ character: CONFIG.character, signin: CONFIG.signin, friends: "nanoterra", emotes: "on", freePlay: "on", fromAdmin: { character: false, signin: false, friends: false, emotes: false, freePlay: false } });
+    expect(r.body).toEqual({ character: CONFIG.character, signin: CONFIG.signin, friends: "nanoterra", emotes: "on", freePlay: "on", fromAdmin: { character: false, signin: false, friends: false, emotes: false, freePlay: false }, legal: DEFAULT_LEGAL });
   });
 
   it("a press is saved, read back, and kept in two meta rows with their own prefix", async () => {
@@ -116,8 +116,8 @@ describe("the Game switches through the Worker", () => {
       expect((await b.call(live(), "/api/admin/game", { method: "POST", body })).status, JSON.stringify(body)).toBe(400);
     }
     expect((await settings()).some((x) => x.key.startsWith("setting:"))).toBe(false);
-    const big = await fetchAs(live(), "/api/admin/game", { method: "POST", headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: `admin=${[...b.jar.values()][0]}` }, body: JSON.stringify({ character: "own", pad: "x".repeat(600) }) });
-    // Too much to read is 413 (the package's handler stops reading at the limit), not 400.
+    const big = await fetchAs(live(), "/api/admin/game", { method: "POST", headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: `admin=${[...b.jar.values()][0]}` }, body: JSON.stringify({ character: "own", pad: "x".repeat(2100) }) });
+    // Too much to read is 413 (the package's handler stops reading at the limit, 2048 bytes since kit 0.15.0), not 400.
     expect(big.status).toBe(413);
     expect((await settings()).some((x) => x.key.startsWith("setting:"))).toBe(false);
   });
@@ -216,11 +216,16 @@ describe("the Worker reads the switches at run time", () => {
     expect((await (await fetchAs(live(), "/nano-game.json")).json()).freePlay).toBe(true);
   });
 
+  it("the listing file's paidRounds says whether plays.json sells a round: true with the starter's Extra round, false with no play", async () => {
+    expect((await (await fetchAs(live(), "/nano-game.json")).json()).paidRounds).toBe(true);
+    expect(listing(live(), new Request("https://game.test/nano-game.json"), { signin: CONFIG.signin }, []).paidRounds).toBe(false);
+  });
+
   it("the character switch is not in the listing file, and nothing else in it changed", async () => {
     const b = await adminIn(owner.address);
     await b.call(live(), "/api/admin/game", { method: "POST", body: { character: "own" } });
     const file = await (await fetchAs(live(), "/nano-game.json")).json();
-    expect(Object.keys(file).sort()).toEqual(["ages", "art", "creator", "freePlay", "line", "multiplayer", "name", "nanoGame", "play", "regions", "signin"]);
+    expect(Object.keys(file).sort()).toEqual(["ages", "art", "creator", "freePlay", "line", "multiplayer", "name", "nanoGame", "paidRounds", "play", "regions", "signin"]);
   });
 
   it("with sign-in off, the start, the callback and Continue answer 'off' and a link made before signs nobody in; 'Not me' still works", async () => {

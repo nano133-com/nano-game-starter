@@ -13,6 +13,7 @@ import { adminSignIn, adminSignOut, ownerPasskeys } from "@nano133/nanoterra/adm
 import { previewHost } from "@nano133/nanoterra/player-signin/panel";
 import { CONFIG } from "../shared/config";
 import { LOOKS } from "../shared/looks";
+import plays from "../../plays.json";
 import { SCHEME } from "../shared/scheme";
 import { get, type Config } from "./ui/api";
 import { personCheck } from "./ui/turnstile";
@@ -30,6 +31,7 @@ const passkey = { scheme: SCHEME, name: CONFIG.name };
 
 mountAdmin(document.getElementById("admin-panel")!, {
   looks: LOOKS,
+  plays,
   // Each look on the game's own character (with its hat and its model), drawn when the Shelf opens; the flat picture until then.
   lookPicture: previewPicture(() => import("./ui/lookPreview").then((m) => m.render)),
   defaultsFile: "game.config.json",

@@ -10,7 +10,10 @@ import { createPlayerSignin, type PlayerSignin } from "@nano133/nanoterra/player
 import { createD1PlayerSignin } from "@nano133/nanoterra/player-signin/d1";
 import { d1Limit, visitorKey } from "@nano133/nanoterra/shop/d1";
 import { createShop, turnstileCheck, type Shop } from "@nano133/nanoterra/shop/worker";
+import { loadLegal } from "@nano133/nanoterra/admin";
+import { createD1Store } from "@nano133/nanoterra/admin/d1";
 import looks from "../../looks.json" with { type: "json" };
+import plays from "../../plays.json" with { type: "json" };
 import { receiveAddress, type Env } from "./env";
 
 /** The player's sign-in: the passkey and the three wallet apps, on /api/signin and /api/signout, with the session cookie `session`. */
@@ -35,6 +38,8 @@ export function playerSignin(env: Env, now = Date.now()): PlayerSignin {
 export function shopOf(env: Env, now = Date.now(), player: (req: Request) => Promise<string | null> = async () => null): Shop {
   return createShop(env, {
     catalogue: looks,
+    plays,
+    legal: () => loadLegal(createD1Store(env.DB, { plays: true })),
     player,
     now: () => now,
     onError: (e) => console.error("shop failed", e instanceof Error ? e.message : String(e)),

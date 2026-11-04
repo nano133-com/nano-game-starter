@@ -297,6 +297,25 @@ of the player may still be paid) and the friends list's `forget(address)` from i
 5. A payment that comes after the order ended (15 minutes) is shown as **Paid late** in `/admin`.
    The look is not given. Send it back by hand from your wallet: the game has no key to do it.
 
+## Paid rounds
+
+Since kit 0.15.0 the game can sell a **paid round**: a round that a player buys and uses once. The starter sells one, `plays.json`:
+an "Extra round" for 5¢. A paid round buys one turn of the game and nothing else. It never wins money or a prize worth money, nothing
+in it is random, and nothing a player buys makes the game easier to win. Some places have laws about paid games: ask a lawyer before you
+turn test mode off. To sell no paid round, make `plays.json` an empty list (`[]`).
+
+- **The Play key.** Beside **Play** and **Play again** the page shows "Play for 5¢". A press buys one round; a round paid in another
+  tab shows "1 round ready", and a press starts it. The round uses its credit only when it starts (`/api/plays/use`, a new round id each
+  time). A paid round never pauses.
+- **The Legal card** in `/admin` (Settings): "Paid rounds for 18 and up only" (on: the player says "I am 18 or older" once), "Sell an
+  extra life or a continue" (off), the refund rule (14 days) and your one confirmation, "You are responsible for the laws where you sell".
+  Outside test mode no paid round is sold until you confirm.
+- **Money back is by hand.** `/admin` lists what to send back from your wallet: a late payment, a round not used in time (30 days), and
+  "Unmatched payments" (a payment to your address that no order recorded). The game has no key to send it.
+- **A price under about 5¢ can be busy.** An order nobody pays holds its amount 75 minutes, and at 1¢ (at $1 a XNO) a price has only 11 amounts.
+- `migrations/0010_plays.sql` adds the tables (`credits`, `play_adults`) and three columns of `orders`. The listing file says
+  `"paidRounds": true` while `plays.json` sells a round.
+
 ## Run it on your computer
 
 ```sh
@@ -316,6 +335,12 @@ Move the kit with `npm install @nano133/nanoterra@<version>`, then run `npm run 
   until its `snapshot()` leaves out the new setting row too: add `'setting:freePlay'` to its list `NOT IN ('setting:character', ...)`. Then
   read the setting in `settingsOf` (`src/worker/admin.ts`) and write `freePlay: freePlayOn(settings)` in `listing()` (`src/worker/index.ts`).
   No migration: the setting is a row of `meta`.
+- **0.15.0 (paid rounds):** add `migrations/0010_plays.sql` (the kit's `@nano133/nanoterra/shop/d1-plays.sql`) and its name in `MIGRATIONS`
+  (`test/helpers.ts`), and apply it BEFORE you deploy. The store contract's `snapshot()` leaves out five more setting rows:
+  `'setting:adultsOnly'`, `'setting:sellLives'`, `'setting:refundDays'`, `'setting:refundWords'` and `'setting:lawsConfirmedAt'`. A test
+  that builds the admin's game state by hand adds `legal: DEFAULT_LEGAL`. The admin's press may be 2048 bytes (was 512). The listing file
+  gets `paidRounds: paidRoundsOn(plays)`. A game that sells no paid round still needs the migration file, because the starter's admin
+  store reads the plays' tables (`createD1Store(env.DB, { plays: true })`).
 
 ## Files you will change
 
@@ -323,6 +348,7 @@ Move the kit with `npm install @nano133/nanoterra@<version>`, then run `npm run 
 |---|---|
 | `game.config.json` | The game's name, its one line, your name, the round's length, the character switch (`"character": "nanoterra"` or `"own"`), and your game's id on Nanoterra (`"nanoterraId"`, `null` until Nanoterra lists your game; the friends list needs it, see "The friends list") |
 | `looks.json` | The looks, their prices in US dollars and what they change |
+| `plays.json` | The paid rounds and their prices in US dollars (see "Paid rounds"); `[]` sells none |
 | `public/looks/` | The looks' own 3D models (`.glb`), named in a look's `slots` |
 | `src/client/game/` | The 3D game: the island (`world.ts`), the character, the gems, the rules (`game.ts`) |
 | `src/client/options.ts` | The player's settings (the Options key) |

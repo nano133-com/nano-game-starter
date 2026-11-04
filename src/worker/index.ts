@@ -2,7 +2,13 @@
 // 10 minutes. The game's files (index.html, admin.html, /assets) are served by Cloudflare without it.
 
 import { freePlayOn, signinOn, type GameSettings } from "@nano133/nanoterra/admin";
+import { checkPlays, paidRoundsOn, type Play } from "@nano133/nanoterra/looks";
 import { SHOP_LIMITS } from "@nano133/nanoterra/shop/worker";
+import looks from "../../looks.json" with { type: "json" };
+import plays from "../../plays.json" with { type: "json" };
+
+/** plays.json, checked (a mistake in it stops the Worker at its start, as the shop would). */
+const PLAYS = checkPlays(plays, looks);
 import { CONFIG } from "../shared/config";
 import { adminHandler, adminSigninOf, settingsOf } from "./admin";
 import { FRIENDS_BASE, friendsHandler } from "./friends";
@@ -20,7 +26,7 @@ if (!warm) console.warn("the signature warm-up check failed");
  * (`signin` starts from game.config.json's word, free play is on until /admin turns it off): the listing file says how the game signs a Nanoterra
  * player in, and whether it has free play.
  */
-export function listing(env: Env, req: Request, settings: Pick<GameSettings, "signin" | "freePlay"> = { signin: CONFIG.signin }) {
+export function listing(env: Env, req: Request, settings: Pick<GameSettings, "signin" | "freePlay"> = { signin: CONFIG.signin }, sold: readonly Play[] = PLAYS) {
   const origin = new URL(req.url).origin;
   return {
     nanoGame: 1,
@@ -36,6 +42,8 @@ export function listing(env: Env, req: Request, settings: Pick<GameSettings, "si
     signin: settings.signin,
     // Free play (the Game card's "Free play", on by default): false says a player must pay in the game to play, and Nanoterra's listing then says "Paid".
     freePlay: freePlayOn(settings),
+    // Paid rounds (plays.json, kit 0.15.0): true while the game sells a round, a level, a life or a continue. Nanoterra's listing reads it.
+    paidRounds: paidRoundsOn(sold),
     // The character is NOT here: its switch is the "Game" card of /admin (or "character" in game.config.json, "nanoterra" or "own"), and only the game's own code reads it.
   };
 }
