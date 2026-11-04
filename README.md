@@ -299,22 +299,40 @@ of the player may still be paid) and the friends list's `forget(address)` from i
 
 ## Paid rounds
 
-Since kit 0.15.0 the game can sell a **paid round**: a round that a player buys and uses once. The starter sells one, `plays.json`:
-an "Extra round" for 5¢. A paid round buys one turn of the game and nothing else. It never wins money or a prize worth money, nothing
-in it is random, and nothing a player buys makes the game easier to win. Some places have laws about paid games: ask a lawyer before you
-turn test mode off. To sell no paid round, make `plays.json` an empty list (`[]`).
+Since kit 0.15.0 the game can sell a **paid round**: a round that a player buys and uses once. **Paid rounds are off until you add one.**
+The starter's `plays.json` is an empty list (`[]`): no Play key shows, there is no "I am 18 or older" step, and the listing file says
+`"paidRounds": false`. The free **Play** key stays as it is.
 
-- **The Play key.** Beside **Play** and **Play again** the page shows "Play for 5¢". A press buys one round; a round paid in another
-  tab shows "1 round ready", and a press starts it. The round uses its credit only when it starts (`/api/plays/use`, a new round id each
-  time). A paid round never pauses.
-- **The Legal card** in `/admin` (Settings): "Paid rounds for 18 and up only" (on: the player says "I am 18 or older" once), "Sell an
-  extra life or a continue" (off), the refund rule (14 days) and your one confirmation, "You are responsible for the laws where you sell".
-  Outside test mode no paid round is sold until you confirm.
-- **Money back is by hand.** `/admin` lists what to send back from your wallet: a late payment, a round not used in time (30 days), and
-  "Unmatched payments" (a payment to your address that no order recorded). The game has no key to send it.
-- **A price under about 5¢ can be busy.** An order nobody pays holds its amount 75 minutes, and at 1¢ (at $1 a XNO) a price has only 11 amounts.
-- `migrations/0010_plays.sql` adds the tables (`credits`, `play_adults`) and three columns of `orders`. The listing file says
-  `"paidRounds": true` while `plays.json` sells a round.
+A paid round buys one turn of the game and nothing else. It never wins money or a prize worth money, nothing in it is random, and nothing a
+player buys makes the game easier to win. Some places have laws about paid games: ask a lawyer before you turn test mode off.
+
+**Prompt 5 of the nano133 prompt pack ("Charge for a round") does all of this for you.** Your AI assistant also has the kit's skill
+`add-paid-rounds`. To add one by hand:
+
+1. Put a play in `plays.json`, for example an "Extra round" for 5¢:
+
+   ```json
+   [
+     { "id": "extra-round", "name": "Extra round", "priceUsd": 0.05, "use": "round" }
+   ]
+   ```
+
+   `use` is `"round"`, `"level"`, `"life"` or `"continue"`. `useWithinDays` is optional (1 to 365, default 30). A play has no other field
+   and never the id of a look. Run `npm test`: the Worker checks the file (`checkPlays`) and stops at its start if it has a mistake.
+2. Keep `TEST_MODE` on. The page now shows "Play for 5¢" beside **Play** and **Play again**. A press buys one round; a round paid in
+   another tab shows "1 round ready", and a press starts it. The round uses its credit only when it starts (`/api/plays/use`, a new round
+   id each time). A paid round never pauses. The key sells the first play in the file.
+3. Open `/admin`, **Settings**, the **Legal** card: "Paid rounds for 18 and up only" (on: the player says "I am 18 or older" once), "Sell
+   an extra life or a continue" (off), the refund rule (14 days) and your one confirmation, "You are responsible for the laws where you
+   sell". Outside test mode no paid round is sold until you confirm.
+4. Turn test mode off only after your lawyer says yes.
+
+- **Money back is by hand.** `/admin` lists what to send back from your wallet: a late payment, a round not used in time, a round of a play
+  you took out of `plays.json`, and "Unmatched payments" (a payment to your address that no order recorded). The game has no key to send it.
+- **A price under about 5¢ can be busy.** An order nobody pays holds its amount 75 minutes, and at 1¢ (at $1 a XNO) a price has only 11
+  amounts.
+- `migrations/0010_plays.sql` adds the tables (`credits`, `play_adults`) and three columns of `orders`. The starter keeps it with no play
+  too: it does nothing until you sell one, and the admin reads its tables.
 
 ## Run it on your computer
 
@@ -348,7 +366,7 @@ Move the kit with `npm install @nano133/nanoterra@<version>`, then run `npm run 
 |---|---|
 | `game.config.json` | The game's name, its one line, your name, the round's length, the character switch (`"character": "nanoterra"` or `"own"`), and your game's id on Nanoterra (`"nanoterraId"`, `null` until Nanoterra lists your game; the friends list needs it, see "The friends list") |
 | `looks.json` | The looks, their prices in US dollars and what they change |
-| `plays.json` | The paid rounds and their prices in US dollars (see "Paid rounds"); `[]` sells none |
+| `plays.json` | The paid rounds and their prices in US dollars (see "Paid rounds"). The starter's is `[]`: no paid round |
 | `public/looks/` | The looks' own 3D models (`.glb`), named in a look's `slots` |
 | `src/client/game/` | The 3D game: the island (`world.ts`), the character, the gems, the rules (`game.ts`) |
 | `src/client/options.ts` | The player's settings (the Options key) |

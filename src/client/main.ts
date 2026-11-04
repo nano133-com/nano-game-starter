@@ -339,9 +339,10 @@ function showAccount() {
 // ---- buttons ----
 
 // ---- a paid round (plays.json) ----
+// Off until you add a play: the starter's plays.json is an empty list, so no Play key shows (README, "Paid rounds"). The key sells the file's first play.
 // The round's start uses ONE credit: a new round id for each round, and the round starts only after the server says "used".
 let paidRound = false;
-const PLAY_ID = "extra-round";
+const PLAY_ID = (plays as readonly { id: string }[])[0]?.id;
 async function startPaidRound(playId: string) {
   const ref = crypto.randomUUID();
   const r = await post<{ used: boolean; again: boolean }>("/api/plays/use", { playId, ref }).catch(() => null);
@@ -353,8 +354,8 @@ async function startPaidRound(playId: string) {
   game.start();
   showWhere();
 }
-for (const after of ["play", "again"]) {
-  const key = shop.playKey(PLAY_ID, (id) => void startPaidRound(id));
+for (const after of PLAY_ID ? ["play", "again"] : []) {
+  const key = shop.playKey(PLAY_ID!, (id) => void startPaidRound(id));
   if (key) $(after).after(key);
 }
 

@@ -178,7 +178,8 @@ describe("the paid rounds to send back (kit 0.15.0)", () => {
   it("the status warns once for each paid round that goes back, apart from the late payments", async () => {
     const now = Date.now();
     const DAY = 86_400_000;
-    // Two paid plays whose credits passed their end unused, and one late payment of a look: two rounds to send back, one late payment.
+    // Two paid plays whose credits passed their end unused, and one late payment of a look: two rounds to send back, one late payment. The starter's
+    // plays.json sells no play, so these credits are of a play no longer sold ("no_play"): they go back all the same.
     const order = db.prepare("INSERT INTO orders (id, player, look_id, usd, rate, amount, status, created_at, expires_at, hold_until, hash, payer, paid_at, kind, use_days) VALUES (?, ?, ?, '0.05', 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     const credit = db.prepare("INSERT INTO credits (order_id, player, play_id, granted_at, expires_at) VALUES (?, ?, 'extra-round', ?, ?)");
     for (const [i, id] of ["a".repeat(24), "b".repeat(24)].entries()) {
@@ -191,7 +192,7 @@ describe("the paid rounds to send back (kit 0.15.0)", () => {
 
     const r = await (await adminIn(owner.address)).call(live(), "/api/admin/summary");
     expect(r.status).toBe(200);
-    expect(r.body.sendBack.map((x: { orderId: string; why: string }) => [x.orderId, x.why])).toEqual([["a".repeat(24), "not_used_in_time"], ["b".repeat(24), "not_used_in_time"]]);
+    expect(r.body.sendBack.map((x: { orderId: string; why: string }) => [x.orderId, x.why])).toEqual([["a".repeat(24), "no_play"], ["b".repeat(24), "no_play"]]);
     const words = r.body.warnings.join(" ");
     expect(words).toMatch(/2 paid rounds go back to their payers\. Send each one back by hand from your wallet \(see "To send back"\)\./);
     expect(words).toMatch(/1 payment came late\./);

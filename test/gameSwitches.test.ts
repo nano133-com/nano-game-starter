@@ -4,6 +4,8 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { CONFIG } from "../src/shared/config";
+import { checkPlays } from "@nano133/nanoterra/looks";
+import shippedPlays from "../plays.json";
 import { CHARACTER_NEEDS_SIGNIN, CHARACTER_SIGNIN_OFF, DEFAULT_LEGAL, isCharacter, isSigninChoice, parsePatch, pressOf, REVIEW_NOTE, signinOn, stateOf, SWITCHES } from "@nano133/nanoterra/admin";
 import { EXAMPLE_ADDRESS, type Env } from "../src/worker/env";
 import worker, { listing } from "../src/worker/index";
@@ -216,9 +218,14 @@ describe("the Worker reads the switches at run time", () => {
     expect((await (await fetchAs(live(), "/nano-game.json")).json()).freePlay).toBe(true);
   });
 
-  it("the listing file's paidRounds says whether plays.json sells a round: true with the starter's Extra round, false with no play", async () => {
-    expect((await (await fetchAs(live(), "/nano-game.json")).json()).paidRounds).toBe(true);
-    expect(listing(live(), new Request("https://game.test/nano-game.json"), { signin: CONFIG.signin }, []).paidRounds).toBe(false);
+  it("the starter ships with no paid round: plays.json is an empty list, and the listing file says paidRounds false", async () => {
+    expect(shippedPlays).toEqual([]);
+    expect((await (await fetchAs(live(), "/nano-game.json")).json()).paidRounds).toBe(false);
+  });
+
+  it("the listing file's paidRounds is true once the game sells a play (a play of the test's own, not plays.json)", () => {
+    const sold = checkPlays([{ id: "extra-round", name: "Extra round", priceUsd: 0.05, use: "round" }]);
+    expect(listing(live(), new Request("https://game.test/nano-game.json"), { signin: CONFIG.signin }, sold).paidRounds).toBe(true);
   });
 
   it("the character switch is not in the listing file, and nothing else in it changed", async () => {
